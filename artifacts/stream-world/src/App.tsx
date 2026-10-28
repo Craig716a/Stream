@@ -182,7 +182,7 @@ function HomePage() {
       <div className="home-action-pair"><button onClick={changePicks} {...test('button-more-wonderful')}><ListFilter size={16} /> More Wonderful</button><button onClick={changePicks} {...test('button-change-recommendations')}><SlidersHorizontal size={16} /> Change</button></div>
     </div>
     <section className="home-streaming"><div className="section-toolbar"><h2>Streaming services</h2><Link href="/streaming" className="text-link" {...test('link-streaming-services')}>Explore <ChevronRight size={15} /></Link></div>
-      <div className="provider-row">{providers.slice(0, 10).map((provider: WatchProvider) => <Link href={`/streaming/${provider.providerId}`} className="provider-tile" key={provider.providerId} {...test(`home-provider-${provider.providerId}`)} aria-label={`Browse ${provider.name}`} >{provider.logoPath ? <img src={posterUrl(provider.logoPath)} alt="" /> : <span className="provider-initial">{provider.name.slice(0, 1)}</span>}<span>{provider.name}</span></Link>)}</div>
+      <div className="provider-row">{providers.map((provider: WatchProvider) => <Link href={`/streaming/${provider.providerId}`} className="provider-tile" key={provider.providerId} {...test(`home-provider-${provider.providerId}`)} aria-label={`Browse ${provider.name}`} >{provider.logoPath ? <img src={posterUrl(provider.logoPath)} alt="" /> : <span className="provider-initial">{provider.name.slice(0, 1)}</span>}<span>{provider.name}</span></Link>)}</div>
     </section>
   </div>;
 }
