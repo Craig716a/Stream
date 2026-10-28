@@ -149,6 +149,15 @@ export type GetCatalogParams = {
 mediaType: MediaType;
 genreId?: number;
 year?: number;
+/**
+ * @minLength 2
+ * @maxLength 2
+ */
+originalLanguage?: string;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+releaseDateLte?: string;
 sortBy?: GetCatalogSortBy;
 /**
  * @minimum 1
@@ -163,6 +172,29 @@ export const GetCatalogSortBy = {
   popularitydesc: 'popularity.desc',
   release_datedesc: 'release_date.desc',
   vote_averagedesc: 'vote_average.desc',
+} as const;
+
+export type GetTodayParams = {
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+date: string;
+mediaType?: GetTodayMediaType;
+genreId?: number;
+/**
+ * @minLength 2
+ * @maxLength 2
+ */
+originalLanguage?: string;
+};
+
+export type GetTodayMediaType = typeof GetTodayMediaType[keyof typeof GetTodayMediaType];
+
+
+export const GetTodayMediaType = {
+  all: 'all',
+  movie: 'movie',
+  tv: 'tv',
 } as const;
 
 export type GetTrendingParams = {

@@ -25,6 +25,7 @@ import type {
   CatalogPage,
   GetCatalogParams,
   GetProviderCatalogParams,
+  GetTodayParams,
   GetTrendingParams,
   HealthStatus,
   MediaType,
@@ -260,6 +261,114 @@ export function useGetCatalog<TData = Awaited<ReturnType<typeof getCatalog>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetCatalogQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTodayUrl = (params: GetTodayParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/tmdb/today?${stringifiedParams}` : `/api/tmdb/today`
+}
+
+/**
+ * @summary Get titles released or airing on a date
+ */
+export const getToday = async (params: GetTodayParams, options?: Parameters<typeof customFetch>[1]): Promise<CatalogPage> => {
+
+  return customFetch<CatalogPage>(getGetTodayUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTodayQueryKey = (params?: GetTodayParams,) => {
+    return [
+    `/api/tmdb/today`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTodayQueryOptions = <TData = Awaited<ReturnType<typeof getToday>>, TError = ErrorType<ApiError>>(params: GetTodayParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTodayQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getToday>>> = ({ signal }) => getToday(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTodayQueryResult = NonNullable<Awaited<ReturnType<typeof getToday>>>
+export type GetTodayQueryError = ErrorType<ApiError>
+
+
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = ErrorType<ApiError>>(
+ params: GetTodayParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getToday>>,
+          TError,
+          Awaited<ReturnType<typeof getToday>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = ErrorType<ApiError>>(
+ params: GetTodayParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getToday>>,
+          TError,
+          Awaited<ReturnType<typeof getToday>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = ErrorType<ApiError>>(
+ params: GetTodayParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get titles released or airing on a date
+ */
+
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = ErrorType<ApiError>>(
+ params: GetTodayParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetTodayQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -12,6 +12,15 @@ export type GetCatalogParams = {
 mediaType: MediaType;
 genreId?: number;
 year?: number;
+/**
+ * @minLength 2
+ * @maxLength 2
+ */
+originalLanguage?: string;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+releaseDateLte?: string;
 sortBy?: GetCatalogSortBy;
 /**
  * @minimum 1

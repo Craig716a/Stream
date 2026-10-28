@@ -1,10 +1,10 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  useGetCatalog, useGetProviderCatalog, useGetSeasonDetails, useGetTitleDetails,
+  useGetCatalog, useGetProviderCatalog, useGetSeasonDetails, useGetTitleDetails, useGetToday,
   useGetTitleProviders, useGetTitleRecommendations, useGetTrending, useSearchCatalog,
   getGetCatalogQueryKey, getGetProviderCatalogQueryKey, getGetSeasonDetailsQueryKey,
-  getGetTitleDetailsQueryKey, getGetTitleProvidersQueryKey, getGetTitleRecommendationsQueryKey, getGetTrendingQueryKey,
+  getGetTitleDetailsQueryKey, getGetTitleProvidersQueryKey, getGetTitleRecommendationsQueryKey, getGetTodayQueryKey, getGetTrendingQueryKey,
   getSearchCatalogQueryKey,
 } from '@workspace/api-client-react';
 import type { CatalogMediaItem, MediaType, ProviderRegion, WatchProvider } from '@workspace/api-client-react';
@@ -37,9 +37,18 @@ const navItems = [
   { label: 'Me', href: '/me', icon: UserRound },
 ];
 const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
+const homeCategories = ['Recommend', 'Reality-TV', 'Movies', 'TV Shows', 'Anime', 'Korean Dramas'] as const;
+type HomeCategory = (typeof homeCategories)[number];
 const test = (name: string) => ({ 'data-testid': name });
 const posterUrl = (path: string | null | undefined, size = POSTER) => path ? `${size}${path}` : '';
 const yearOf = (date?: string | null) => date ? date.slice(0, 4) : '—';
+const localToday = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+const uniqueTitles = (items: CatalogMediaItem[]) => items.filter((item, index) =>
+  items.findIndex(candidate => candidate.mediaType === item.mediaType && candidate.id === item.id) === index,
+);
 const safeRead = <T,>(key: string, fallback: T): T => {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
 };
@@ -79,10 +88,11 @@ function QueryError({ retry }: { retry: () => void }) { return <div className="e
 function EmptyState({ title, copy }: { title: string; copy: string }) { return <div className="empty-state"><span className="empty-icon"><Film /></span><h3>{title}</h3><p>{copy}</p></div>; }
 
 function PosterCard({ item, large = false, rank, favorite, onFavorite }: { item: CatalogMediaItem; large?: boolean; rank?: number; favorite?: boolean; onFavorite?: () => void }) {
+  if (!item.posterPath) return null;
   const href = `/title/${item.mediaType}/${item.id}`;
   return <article className={`poster-card ${large ? 'poster-card-large' : ''}`} {...test(`card-title-${item.id}`)}>
     <Link href={href} className="poster-link" {...test(`link-title-${item.id}`)}>
-      <div className="poster-frame">{item.posterPath ? <img src={posterUrl(item.posterPath)} alt={`${item.title} poster`} loading="lazy" {...test(`img-poster-${item.id}`)} /> : <div className="poster-fallback"><Film size={28} /><span>{item.title}</span></div>}
+      <div className="poster-frame"><img src={posterUrl(item.posterPath)} alt={`${item.title} poster`} loading="lazy" {...test(`img-poster-${item.id}`)} />
         {rank && <span className="rank-label">{String(rank).padStart(2, '0')}</span>}
         <span className="poster-rating"><Star size={12} fill="currentColor" /> {item.voteAverage?.toFixed(1) || '—'}</span>
       </div>
@@ -92,8 +102,9 @@ function PosterCard({ item, large = false, rank, favorite, onFavorite }: { item:
   </article>;
 }
 function PosterGrid({ items, favorites, toggleFavorite, emptyTitle = 'Nothing here yet', emptyCopy = 'Try changing your filters.', className = 'poster-grid' }: { items: CatalogMediaItem[]; favorites?: CatalogMediaItem[]; toggleFavorite?: (item: CatalogMediaItem) => void; emptyTitle?: string; emptyCopy?: string; className?: string }) {
-  if (!items.length) return <EmptyState title={emptyTitle} copy={emptyCopy} />;
-  return <div className={className}>{items.map((item, i) => <PosterCard key={`${item.mediaType}-${item.id}`} item={item} rank={i < 10 ? i + 1 : undefined} favorite={favorites?.some(entry => entry.id === item.id)} onFavorite={toggleFavorite ? () => toggleFavorite(item) : undefined} />)}</div>;
+  const withPosters = items.filter(item => item.posterPath);
+  if (!withPosters.length) return <EmptyState title={emptyTitle} copy={emptyCopy} />;
+  return <div className={className}>{withPosters.map((item, i) => <PosterCard key={`${item.mediaType}-${item.id}`} item={item} rank={i < 10 ? i + 1 : undefined} favorite={favorites?.some(entry => entry.id === item.id)} onFavorite={toggleFavorite ? () => toggleFavorite(item) : undefined} />)}</div>;
 }
 function PillRow({ options, value, onChange, testId }: { options: { label: string; value: string | number }[]; value: string | number; onChange: (v: string | number) => void; testId: string }) {
   return <div className="pill-row" role="tablist">{options.map(option => <button key={option.value} role="tab" aria-selected={value === option.value} className={`pill ${value === option.value ? 'selected' : ''}`} onClick={() => onChange(option.value)} {...test(`${testId}-${String(option.value).replace(/\W/g, '-')}`)}>{option.label}</button>)}</div>;
@@ -102,39 +113,62 @@ function PillRow({ options, value, onChange, testId }: { options: { label: strin
 function HomePage() {
   const [, setLocation] = useLocation();
   const [searchText, setSearchText] = useState('');
-  const [homeTab, setHomeTab] = useState('Recommend');
+  const [homeTab, setHomeTab] = useState<HomeCategory>('Recommend');
   const [featureIndex, setFeatureIndex] = useState(0);
   const [catalogPage, setCatalogPage] = useState(1);
   const [relatedPage, setRelatedPage] = useState(1);
-  const trendParams = { mediaType: 'all' as const, timeWindow: 'week' as const };
+  const today = localToday();
+  const media: MediaType = homeTab === 'Movies' ? 'movie' : 'tv';
+  const genreId = homeTab === 'Reality-TV' ? 10764 : homeTab === 'Anime' ? 16 : homeTab === 'Korean Dramas' ? 18 : undefined;
+  const originalLanguage = homeTab === 'Korean Dramas' ? 'ko' : undefined;
+  const trendMediaType = homeTab === 'Recommend' ? 'all' as const : media;
+  const trendParams = { mediaType: trendMediaType, timeWindow: 'week' as const };
   const trend = useGetTrending(trendParams, { query: { queryKey: getGetTrendingQueryKey(trendParams) } });
-  const media = homeTab === 'Movies' ? 'movie' : 'tv';
-  const genreId = homeTab === 'Reality-TV' ? 10764 : homeTab === 'Anime' ? 16 : undefined;
-  const catalogParams = { mediaType: media as MediaType, genreId, sortBy: 'popularity.desc' as const, page: catalogPage };
+  const catalogParams = { mediaType: media, genreId, originalLanguage, sortBy: 'popularity.desc' as const, page: catalogPage };
   const catalog = useGetCatalog(catalogParams, { query: { queryKey: getGetCatalogQueryKey(catalogParams), enabled: homeTab !== 'Recommend' } });
-  const newParams = { mediaType: 'tv' as const, sortBy: 'release_date.desc' as const, page: 1 };
-  const newTitles = useGetCatalog(newParams, { query: { queryKey: getGetCatalogQueryKey(newParams) } });
+  const todayParams = { date: today, mediaType: homeTab === 'Recommend' ? 'all' as const : media, genreId, originalLanguage };
+  const todayTitles = useGetToday(todayParams, { query: { queryKey: getGetTodayQueryKey(todayParams) } });
+  const koreanParams = { mediaType: 'tv' as const, genreId: 18, originalLanguage: 'ko', releaseDateLte: today, sortBy: 'release_date.desc' as const, page: 1 };
+  const koreanTitles = useGetCatalog(koreanParams, { query: { queryKey: getGetCatalogQueryKey(koreanParams), enabled: homeTab === 'Recommend' || homeTab === 'TV Shows' } });
   const movies = useGetProviderCatalog({ mediaType: 'movie' }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'movie' }) } });
   const tvProviders = useGetProviderCatalog({ mediaType: 'tv' }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'tv' }) } });
   const providers = [...(movies.data || []), ...(tvProviders.data || [])].filter((provider, index, list) => list.findIndex(item => item.providerId === provider.providerId) === index);
-  const featuredItems = trend.data?.results?.slice(0, 6) || [];
+  const matchesCategory = (item: CatalogMediaItem) =>
+    (!genreId || item.genreIds.includes(genreId)) &&
+    (!originalLanguage || item.originalLanguage === originalLanguage);
+  const trendingForCategory = (trend.data?.results || []).filter(matchesCategory);
+  const catalogResults = catalog.data?.results || [];
+  const recommended = homeTab === 'Recommend' ? (trend.data?.results || []) : uniqueTitles([...trendingForCategory, ...catalogResults]);
+  const featuredItems = (homeTab === 'Recommend' ? recommended : uniqueTitles([...trendingForCategory, ...catalogResults]))
+    .filter(item => item.posterPath)
+    .slice(0, 10);
   const currentFeature = featuredItems[featureIndex % Math.max(1, featuredItems.length)];
-  const recommended = homeTab === 'Recommend' ? (trend.data?.results || []) : (catalog.data?.results || []);
+  const showKoreanShelf = homeTab === 'Recommend' || homeTab === 'TV Shows';
+  useEffect(() => {
+    if (featuredItems.length < 2) return;
+    const timer = window.setInterval(() => {
+      setFeatureIndex(index => (index + 1) % featuredItems.length);
+    }, 7000);
+    return () => window.clearInterval(timer);
+  }, [homeTab, featuredItems.length]);
   const changePicks = () => {
     setRelatedPage(page => page + 1);
     setCatalogPage(page => page + 1);
   };
   return <div className="home-page">
     <div className="home-search-row"><form className="top-search" onSubmit={e => { e.preventDefault(); if (searchText.trim()) setLocation(`/search/${encodeURIComponent(searchText.trim())}`); }} data-testid="form-global-search"><Search size={17} /><input aria-label="Search movies and series" placeholder="Search movies, series…" value={searchText} onChange={e => setSearchText(e.target.value)} data-testid="input-global-search" />{searchText && <button type="button" onClick={() => setSearchText('')} aria-label="Clear search" {...test('button-clear-search')}><X size={15} /></button>}</form><button className="history-shortcut" onClick={() => setLocation('/me?panel=history')} aria-label="Open watch history" {...test('button-home-history')}><Clock3 size={22} /></button></div>
-    <div className="home-category-tabs" role="tablist">{['Recommend', 'Reality-TV', 'Movies', 'TV Shows', 'Anime'].map(label => <button key={label} role="tab" aria-selected={homeTab === label} className={homeTab === label ? 'active' : ''} onClick={() => { setHomeTab(label); setCatalogPage(1); }} {...test(`tab-home-${label.toLowerCase().replace(/\W/g, '-')}`)}>{label}</button>)}</div>
+    <div className="home-category-tabs" role="tablist">{homeCategories.map(label => <button key={label} role="tab" aria-selected={homeTab === label} className={homeTab === label ? 'active' : ''} onClick={() => { setHomeTab(label); setFeatureIndex(0); setCatalogPage(1); }} {...test(`tab-home-${label.toLowerCase().replace(/\W/g, '-')}`)}>{label}</button>)}</div>
     <div className="feature-carousel">
-      {currentFeature ? <Link href={`/title/${currentFeature.mediaType}/${currentFeature.id}`} className="feature-banner" style={{ backgroundImage: currentFeature.backdropPath ? `linear-gradient(90deg, rgba(2,10,17,.08), rgba(2,10,17,.02)), url(${posterUrl(currentFeature.backdropPath, BACKDROP)})` : undefined }} {...test('link-featured-title')} aria-label={`Featured: ${currentFeature.title}`} /> : <div className="feature-banner feature-loading" />}
-      <div className="feature-dots">{featuredItems.map((item, index) => <button key={item.id} onClick={() => setFeatureIndex(index)} className={index === featureIndex ? 'selected' : ''} aria-label={`Show featured title ${index + 1}`} {...test(`button-feature-slide-${index + 1}`)} />)}<button className="feature-next" onClick={() => setFeatureIndex(index => index + 1)} aria-label="Next featured title" {...test('button-feature-next')}><ChevronRight size={14} /></button></div>
+      {currentFeature ? <Link href={`/title/${currentFeature.mediaType}/${currentFeature.id}`} className="feature-banner" style={{ backgroundImage: `linear-gradient(90deg, rgba(2,10,17,.08), rgba(2,10,17,.02)), url(${posterUrl(currentFeature.backdropPath || currentFeature.posterPath, currentFeature.backdropPath ? BACKDROP : POSTER)})` }} {...test('link-featured-title')} aria-label={`Featured: ${currentFeature.title}`} /> : <div className="feature-banner feature-loading" />}
+      <div className="feature-dots">{featuredItems.map((item, index) => <button key={`${item.mediaType}-${item.id}`} onClick={() => setFeatureIndex(index)} className={index === featureIndex ? 'selected' : ''} aria-label={`Show featured title ${index + 1}`} {...test(`button-feature-slide-${index + 1}`)} />)}{featuredItems.length > 1 && <button className="feature-next" onClick={() => setFeatureIndex(index => (index + 1) % featuredItems.length)} aria-label="Next featured title" {...test('button-feature-next')}><ChevronRight size={14} /></button>}</div>
     </div>
-    <div className="section-toolbar home-section-toolbar"><h2>{homeTab === 'Recommend' ? 'Trending Now' : homeTab}</h2><Link href="/streaming" className="text-link" {...test('link-trending-chart')}>See all <ChevronRight size={15} /></Link></div>
+    <div className="section-toolbar home-section-toolbar"><h2>{homeTab === 'Korean Dramas' ? 'Korean Dramas' : homeTab === 'Recommend' ? 'Trending Now' : homeTab}</h2><Link href="/streaming" className="text-link" {...test('link-trending-chart')}>See all <ChevronRight size={15} /></Link></div>
     {trend.isLoading && homeTab === 'Recommend' || catalog.isLoading && homeTab !== 'Recommend' ? <LoadingGrid /> : trend.isError && homeTab === 'Recommend' ? <QueryError retry={() => trend.refetch()} /> : catalog.isError && homeTab !== 'Recommend' ? <QueryError retry={() => catalog.refetch()} /> : <div className="home-trending-grid">{recommended.slice(0, 9).map(item => <PosterCard key={`${item.mediaType}-${item.id}`} item={item} rank={undefined} />)}</div>}
-    <div className="home-compact-section"><div className="section-toolbar"><h2>New today</h2><button className="text-link-button" onClick={() => setRelatedPage(page => page + 1)} {...test('button-new-today-change')}>Change</button></div>
-      {newTitles.isLoading ? <div className="horizontal-posters"><LoadingGrid /></div> : newTitles.isError ? <QueryError retry={() => newTitles.refetch()} /> : <div className="horizontal-posters compact-posters">{newTitles.data?.results?.slice(relatedPage % 3, (relatedPage % 3) + 6).map(item => <PosterCard key={item.id} item={item} />)}</div>}
+    {showKoreanShelf && <div className="home-korean-section"><div className="section-toolbar"><h2>New Korean drama series</h2><button className="text-link-button" onClick={() => { setHomeTab('Korean Dramas'); setFeatureIndex(0); setCatalogPage(1); }} {...test('button-korean-dramas-see-all')}>See all <ChevronRight size={14} /></button></div>
+      {koreanTitles.isLoading ? <LoadingGrid /> : koreanTitles.isError ? <QueryError retry={() => koreanTitles.refetch()} /> : <div className="home-korean-grid">{(koreanTitles.data?.results || []).filter(item => item.posterPath).slice(0, 9).map(item => <PosterCard key={`${item.mediaType}-${item.id}`} item={item} />)}</div>}
+    </div>}
+    <div className="home-compact-section"><div className="section-toolbar"><h2>New today</h2></div>
+      {todayTitles.isLoading ? <div className="home-today-loading"><LoadingGrid /></div> : todayTitles.isError ? <QueryError retry={() => todayTitles.refetch()} /> : todayTitles.data?.results?.filter(item => item.posterPath).length ? <div className="home-today-grid">{todayTitles.data.results.filter(item => item.posterPath).slice(0, 9).map(item => <RecommendCard key={`${item.mediaType}-${item.id}`} item={item} badge={item.mediaType === 'tv' ? 'New episode' : 'New movie'} />)}</div> : <EmptyState title="Nothing new today" copy="New releases and episodes will appear here when they air." />}
     </div>
     <div className="home-related-section"><div className="section-toolbar"><h2>You may also like</h2></div>
       {catalog.isLoading && homeTab !== 'Recommend' ? <LoadingGrid /> : <div className="you-may-like-grid">{(recommended.length ? recommended : trend.data?.results || []).slice(2 + (relatedPage % 2), 6 + (relatedPage % 2)).map((item, i) => <RecommendCard key={`${item.mediaType}-${item.id}`} item={item} episodeBadge={item.mediaType === 'tv' && i % 2 === 0} />)}</div>}
@@ -146,9 +180,10 @@ function HomePage() {
   </div>;
 }
 
-function RecommendCard({ item, episodeBadge }: { item: CatalogMediaItem; episodeBadge?: boolean }) {
+function RecommendCard({ item, episodeBadge, badge }: { item: CatalogMediaItem; episodeBadge?: boolean; badge?: string }) {
+  if (!item.posterPath) return null;
   return <Link href={`/title/${item.mediaType}/${item.id}`} className="recommend-card" {...test(`link-recommended-${item.id}`)}>
-    <div className="recommend-image">{item.posterPath && <img src={posterUrl(item.posterPath)} alt={`${item.title} poster`} />}{episodeBadge && <span className="episode-badge">New episode</span>}<span className="recommend-title-overlay">{item.title}</span><span className="recommend-rating">{item.voteAverage.toFixed(1)}</span></div>
+    <div className="recommend-image"><img src={posterUrl(item.posterPath)} alt={`${item.title} poster`} />{(episodeBadge || badge) && <span className="episode-badge">{badge || 'New episode'}</span>}<span className="recommend-title-overlay">{item.title}</span><span className="recommend-rating">{item.voteAverage.toFixed(1)}</span></div>
     <div className="recommend-caption"><strong>{item.title}</strong><small>{item.mediaType === 'tv' ? 'TV series' : 'Movie'} · {yearOf(item.releaseDate)}</small></div>
   </Link>;
 }
@@ -156,13 +191,15 @@ function RecommendCard({ item, episodeBadge }: { item: CatalogMediaItem; episode
 function StreamingPage() {
   const [chart, setChart] = useState<'hot' | 'soaring' | 'new' | 'search'>('hot');
   const [media, setMedia] = useState<'all' | 'movie' | 'tv'>('all');
+  const today = localToday();
   const trendParams = { mediaType: media, timeWindow: chart === 'search' ? 'day' as const : 'week' as const };
   const trend = useGetTrending(trendParams, { query: { queryKey: getGetTrendingQueryKey(trendParams), enabled: chart === 'hot' || chart === 'search' } });
   const catalogMedia = media === 'all' ? 'movie' : media;
   const catalogSort = chart === 'new' ? 'release_date.desc' as const : 'vote_average.desc' as const;
-  const catalogParams = { mediaType: catalogMedia, sortBy: catalogSort, page: 1 };
+  const catalogParams = { mediaType: catalogMedia, sortBy: catalogSort, releaseDateLte: chart === 'new' ? today : undefined, page: 1 };
   const catalog = useGetCatalog(catalogParams, { query: { queryKey: getGetCatalogQueryKey(catalogParams), enabled: chart === 'soaring' || chart === 'new' } });
-  const items = chart === 'hot' || chart === 'search' ? trend.data?.results || [] : catalog.data?.results || [];
+  const items = (chart === 'hot' || chart === 'search' ? trend.data?.results || [] : catalog.data?.results || [])
+    .filter(item => chart !== 'new' || (!!item.posterPath && !!item.releaseDate && item.releaseDate <= today));
   const loading = (chart === 'hot' || chart === 'search') ? trend.isLoading : catalog.isLoading;
   const failure = (chart === 'hot' || chart === 'search') ? trend.isError : catalog.isError;
   const retry = () => (chart === 'hot' || chart === 'search') ? trend.refetch() : catalog.refetch();
@@ -204,10 +241,10 @@ function SharingPage() {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const share = async () => {
-    try { if (navigator.share) await navigator.share({ title: 'Stream World', text: 'Find your next favorite story.', url: shareUrl }); else { await navigator.clipboard.writeText(shareUrl); setCopied(true); window.setTimeout(() => setCopied(false), 2200); } } catch { /* share sheet dismissed */ }
+    try { if (navigator.share) await navigator.share({ title: 'RebelStream', text: 'Find your next favorite story.', url: shareUrl }); else { await navigator.clipboard.writeText(shareUrl); setCopied(true); window.setTimeout(() => setCopied(false), 2200); } } catch { /* share sheet dismissed */ }
   };
   return <div className="page-wrap"><PageHeading eyebrow="Stories travel further" title="Sharing" />
-    <section className="share-hero"><div className="share-orbit orbit-one" /><div className="share-orbit orbit-two" /><div className="share-copy"><span className="eyebrow">Pass the popcorn</span><h2>Good taste<br />is better shared.</h2><p>Send Stream World to someone who always asks, “what should we watch?”</p><button className="button-primary" onClick={share} {...test('button-share-app')}>{copied ? <Check size={17} /> : <Share2 size={17} />}{copied ? 'Link copied' : 'Share Stream World'}</button></div><div className="share-art"><span className="share-card card-back"><Film /></span><span className="share-card card-front"><Play fill="currentColor" /></span><span className="share-line">WORLDWIDE / 001</span></div></section>
+    <section className="share-hero"><div className="share-orbit orbit-one" /><div className="share-orbit orbit-two" /><div className="share-copy"><span className="eyebrow">Pass the popcorn</span><h2>Good taste<br />is better shared.</h2><p>Send RebelStream to someone who always asks, “what should we watch?”</p><button className="button-primary" onClick={share} {...test('button-share-app')}>{copied ? <Check size={17} /> : <Share2 size={17} />}{copied ? 'Link copied' : 'Share RebelStream'}</button></div><div className="share-art"><span className="share-card card-back"><Film /></span><span className="share-card card-front"><Play fill="currentColor" /></span><span className="share-line">WORLDWIDE / 001</span></div></section>
     <section className="share-options"><h2>Choose how to share</h2><button onClick={share} className="share-option" {...test('button-share-link')}><span className="option-icon"><Share2 size={18} /></span><span><strong>Share a link</strong><small>Invite someone to explore with you</small></span><ChevronRight size={18} /></button><div className="share-option static"><span className="option-icon"><Heart size={18} /></span><span><strong>Share a favorite</strong><small>Open a title and tap the heart to save it first</small></span><ChevronRight size={18} /></div></section>
   </div>;
 }
@@ -221,7 +258,7 @@ function MePage() {
     <section className="profile-top"><div className="profile-avatar"><UserRound size={35} /></div><button className="vip-mini" onClick={() => setPanel(panel === 'vip' ? '' : 'vip')} {...test('button-vip-details')}><span>VIP</span><small>VIP has expired</small><ChevronRight size={15} /></button></section>
     <button className="vip-promo" onClick={() => setPanel(panel === 'vip' ? '' : 'vip')} {...test('button-vip-promo')}><span><strong>Join VIP skip the ads</strong><small>40%+ discount currently!</small></span><b>Subscribe <ChevronRight size={16} /></b></button>
     <section className="profile-menu">
-      <button className="profile-row" onClick={() => setLocation('/sharing')} {...test('button-me-share')}><span className="menu-icon accent"><Share2 /></span><span><strong>Share</strong><small>Tell someone about Stream World</small></span><ChevronRight /></button>
+      <button className="profile-row" onClick={() => setLocation('/sharing')} {...test('button-me-share')}><span className="menu-icon accent"><Share2 /></span><span><strong>Share</strong><small>Tell someone about RebelStream</small></span><ChevronRight /></button>
       <button className="profile-row" onClick={() => setPanel(panel === 'language' ? '' : 'language')} {...test('button-me-language')}><span className="menu-icon"><Languages /></span><span><strong>Language Switching</strong><small>{language}</small></span><ChevronRight /></button>
       <button className="profile-row" onClick={() => setPanel(panel === 'history' ? '' : 'history')} {...test('button-me-history')}><span className="menu-icon"><Clock3 /></span><span><strong>History</strong><small>{history.length} titles recently opened</small></span><ChevronRight /></button>
       <button className="profile-row" onClick={() => setPanel(panel === 'favorites' ? '' : 'favorites')} {...test('button-me-favorites')}><span className="menu-icon"><Bookmark /></span><span><strong>My favorites</strong><small>{favorites.length} titles saved</small></span><ChevronRight /></button>
@@ -320,11 +357,10 @@ function TitlePage() {
   const favorite = favorites.some(item => item.id === title.id);
   const regions = providerQuery.data as ProviderRegion[] | undefined;
   const selectedRegion = regions?.find(region => region.iso3166_1 === regionCode);
-  const episode = seasonQuery.data?.episodes?.find(item => item.episodeNumber === selectedEpisode);
   const shareTitle = async () => {
     const url = window.location.href;
     try {
-      if (navigator.share) await navigator.share({ title: title.title, text: `Discover ${title.title} on Stream World`, url });
+      if (navigator.share) await navigator.share({ title: title.title, text: `Discover ${title.title} on RebelStream`, url });
       else await navigator.clipboard.writeText(url);
     } catch { /* Share sheet dismissed. */ }
   };
@@ -347,14 +383,12 @@ function TitlePage() {
         <button className="quick-action" onClick={shareTitle} {...test('button-title-share')}><Share2 size={19} /><span>Share</span></button>
       </div>
       {feedbackOpen && <form className="title-feedback" onSubmit={e => { e.preventDefault(); if (feedback.trim()) { setFeedbackSent(true); setFeedback(''); } }}><textarea value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Tell us what you think…" aria-label="Title feedback" {...test('input-title-feedback')} /><button type="submit" className="button-secondary" {...test('button-submit-title-feedback')}>{feedbackSent ? 'Sent' : 'Send feedback'}</button></form>}
-      {title.overview && <p className="title-overview">{title.overview}</p>}
       <div className="audio-track-row"><span>Language</span><div className="track-switch">{(['Original', 'Dub'] as const).map(track => <button key={track} className={audioTrack === track ? 'selected' : ''} onClick={() => setAudioTrack(track)} {...test(`button-audio-${track.toLowerCase()}`)}>{track}</button>)}</div></div>
       {audioTrack === 'Dub' && <p className="audio-note">Audio tracks are not supplied by TMDb; this setting is a preference only.</p>}
       {mediaType === 'tv' && <section className="episode-picker">
         <div className="episode-picker-head"><label className="season-picker"><select value={selectedSeason} onChange={e => { setSeasonNumber(Number(e.target.value)); setSelectedEpisode(1); }} aria-label="Select season" {...test('select-season')}>{(title.seasons || []).filter(season => season.seasonNumber >= 0).map(season => <option key={season.id} value={season.seasonNumber}>{season.name || `Season ${season.seasonNumber}`}</option>)}</select><ChevronDown size={14} /></label>
           {title.lastEpisodeNumber && <span className="update-count">Update to {title.lastEpisodeNumber} <ChevronRight size={14} /></span>}</div>
-        {seasonQuery.isLoading ? <div className="number-skeletons"><i /><i /><i /><i /><i /><i /></div> : seasonQuery.isError ? <QueryError retry={() => seasonQuery.refetch()} /> : seasonQuery.data?.episodes?.length ? <div className="episode-number-grid">{seasonQuery.data.episodes.map(ep => <button className={selectedEpisode === ep.episodeNumber ? 'episode-number-button selected' : 'episode-number-button'} key={ep.id} onClick={() => setSelectedEpisode(ep.episodeNumber)} aria-label={`Episode ${ep.episodeNumber}: ${ep.name}`} {...test(`button-episode-${ep.episodeNumber}`)}>{ep.episodeNumber}</button>)}</div> : <EmptyState title="No episodes listed" copy="Episode details will appear when available." />}
-        {episode && <div className="selected-episode-detail" {...test(`selected-episode-${episode.episodeNumber}`)}><div><strong>{episode.name}</strong><span>Episode {episode.episodeNumber}{episode.runtime ? ` · ${episode.runtime} min` : ''}</span></div><button className="episode-detail-play" onClick={openPlayer} {...test('button-play-selected-episode')}><Play size={15} fill="currentColor" /> Open player</button><p>{episode.overview}</p></div>}
+        {seasonQuery.isLoading ? <div className="number-skeletons"><i /><i /><i /><i /><i /><i /></div> : seasonQuery.isError ? <QueryError retry={() => seasonQuery.refetch()} /> : seasonQuery.data?.episodes?.length ? <div className="episode-number-grid" aria-label="Episodes; swipe horizontally to see more">{seasonQuery.data.episodes.map(ep => <button className={selectedEpisode === ep.episodeNumber ? 'episode-number-button selected' : 'episode-number-button'} key={ep.id} onClick={() => setSelectedEpisode(ep.episodeNumber)} aria-label={`Episode ${ep.episodeNumber}: ${ep.name}`} {...test(`button-episode-${ep.episodeNumber}`)}>{ep.episodeNumber}</button>)}</div> : <EmptyState title="No episodes listed" copy="Episode details will appear when available." />}
       </section>}
       <section className="similar-section title-more-like"><div className="section-toolbar"><h2>More Like This</h2><Link href="/categories" className="text-link" {...test('link-more-like-this')}>More <ChevronRight size={14} /></Link></div>
         {recommendations.isLoading ? <LoadingGrid /> : recommendations.isError ? <QueryError retry={() => recommendations.refetch()} /> : <div className="horizontal-posters title-similar-row">{(recommendations.data?.results || []).filter(item => item.id !== id).slice(0, 8).map(item => <PosterCard key={item.id} item={item} />)}</div>}
@@ -377,7 +411,7 @@ function PlayerPage() {
   const title = details.data;
   const episode = episodeQuery.data?.episodes?.find(ep => ep.episodeNumber === episodeNumber);
   const trailerKey = title?.trailerKey;
-  return <div className="player-page"><div className="player-top"><Link href={title ? `/title/${mediaType}/${id}` : '/'} className="player-back" {...test('link-player-back')}><ArrowLeft size={18} /> Back to title</Link><span>STREAM WORLD / PLAYER</span></div>
+  return <div className="player-page"><div className="player-top"><Link href={title ? `/title/${mediaType}/${id}` : '/'} className="player-back" {...test('link-player-back')}><ArrowLeft size={18} /> Back to title</Link><span>REBELSTREAM / PLAYER</span></div>
     <div className="player-frame">{details.isLoading ? <div className="player-loading"><div /><span>Loading title information</span></div> : trailerKey ? <iframe src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=0&rel=0`} title={title?.trailerName || `${title?.title} official trailer`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen {...test('iframe-official-trailer')} /> : <div className="player-empty"><span className="player-play"><Play size={26} fill="currentColor" /></span><span className="eyebrow">TRAILER NOT AVAILABLE</span><h2>No official trailer found</h2><p>TMDb provides metadata and official trailer references, not full episode streams.</p></div>}</div>
      <div className="player-caption"><div><span className="eyebrow">{mediaType === 'tv' ? `SEASON ${seasonNumber} · EPISODE ${episodeNumber}` : 'OFFICIAL TRAILER'}</span><h1>{episode?.name || title?.title || 'Loading…'}</h1><p>{title?.title}{title?.trailerName && ` · ${title.trailerName}`}</p></div><div className="player-notice"><Video size={16} /><span>Full episode playback is not supplied by TMDb. This player shows an official trailer when one is available.{trailerKey && <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(trailerKey)}`} target="_blank" rel="noreferrer" {...test('link-player-official-trailer')}>If unavailable in your region, watch on YouTube <ChevronRight size={12} /></a>}</span></div></div>
   </div>;

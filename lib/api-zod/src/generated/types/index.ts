@@ -15,6 +15,8 @@ export * from './genre';
 export * from './getCatalogParams';
 export * from './getCatalogSortBy';
 export * from './getProviderCatalogParams';
+export * from './getTodayMediaType';
+export * from './getTodayParams';
 export * from './getTrendingMediaType';
 export * from './getTrendingParams';
 export * from './getTrendingTimeWindow';

@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import {
   GetCatalogQueryParams,
   GetCatalogResponse,
+  GetTodayQueryParams,
   GetProviderCatalogQueryParams,
   GetProviderCatalogResponse,
   GetSeasonDetailsParams,
@@ -242,11 +243,76 @@ router.get("/tmdb/discover", async (req, res): Promise<void> => {
       sort_by: sortBy,
       page: query.page,
       with_genres: query.genreId,
+      with_original_language: query.originalLanguage,
       primary_release_year: query.mediaType === "movie" ? query.year : undefined,
       first_air_date_year: query.mediaType === "tv" ? query.year : undefined,
+      "primary_release_date.lte":
+        query.mediaType === "movie" ? query.releaseDateLte : undefined,
+      "first_air_date.lte":
+        query.mediaType === "tv" ? query.releaseDateLte : undefined,
       include_adult: "false",
     });
     res.json(GetCatalogResponse.parse(mapPage(raw, query.mediaType)));
+  } catch (error) {
+    sendTmdbError(req, res, error);
+  }
+});
+
+router.get("/tmdb/today", async (req, res): Promise<void> => {
+  const parsed = GetTodayQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const query = parsed.data;
+  const sharedParams = {
+    page: 1,
+    with_genres: query.genreId,
+    with_original_language: query.originalLanguage,
+    include_adult: "false",
+  };
+  const requests: Promise<unknown>[] = [];
+
+  if (query.mediaType === "all" || query.mediaType === "movie") {
+    requests.push(
+      getTmdb("/discover/movie", {
+        ...sharedParams,
+        "primary_release_date.gte": query.date,
+        "primary_release_date.lte": query.date,
+        sort_by: "popularity.desc",
+      }),
+    );
+  }
+  if (query.mediaType === "all" || query.mediaType === "tv") {
+    requests.push(
+      getTmdb("/discover/tv", {
+        ...sharedParams,
+        "air_date.gte": query.date,
+        "air_date.lte": query.date,
+        sort_by: "popularity.desc",
+      }),
+    );
+  }
+
+  try {
+    const pages = await Promise.all(requests);
+    const types: MediaType[] =
+      query.mediaType === "all" ? ["movie", "tv"] : [query.mediaType];
+    const results = pages
+      .flatMap((page, index) =>
+        array(record(page).results).map((item) => mapMedia(item, types[index])),
+      )
+      .sort((a, b) => number(record(b).voteAverage) - number(record(a).voteAverage));
+
+    res.json(
+      GetCatalogResponse.parse({
+        page: 1,
+        totalPages: 1,
+        totalResults: results.length,
+        results,
+      }),
+    );
   } catch (error) {
     sendTmdbError(req, res, error);
   }

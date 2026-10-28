@@ -799,6 +799,27 @@ h1,h2,h3,p { margin-top:0; }
 .trailer-region-link { position:absolute; right:10px; bottom:10px; z-index:2; padding:8px 10px; border-radius:4px; background:rgba(0,0,0,.76); color:white; text-decoration:none; }
 .player-notice a { display:flex; align-items:center; gap:3px; margin-top:6px; color:#c0d0db; text-decoration:underline; text-underline-offset:2px; }
 
+/* RebelStream home feed and compact episode selection */
+.feature-banner { animation: feature-fade-in .35s ease both; }
+@keyframes feature-fade-in { from { opacity:.72; } to { opacity:1; } }
+.home-korean-section { margin-top:24px; }
+.home-korean-section .section-toolbar { align-items:center; margin:0 0 11px; }
+.home-korean-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:17px 9px; }
+.home-today-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px 9px; }
+.home-today-grid .recommend-image { aspect-ratio:.72/1; }
+.home-today-grid .recommend-title-overlay { left:7px; right:6px; bottom:8px; font-size:13px; line-height:1.2; }
+.home-today-grid .recommend-rating { right:6px; bottom:6px; font-size:14px; }
+.home-today-grid .episode-badge { padding:4px 6px; font-size:9px; }
+.home-today-loading .poster-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.title-detail-page .episode-number-grid { display:flex; gap:8px; overflow-x:auto; overscroll-behavior-x:contain; padding-bottom:4px; scrollbar-width:none; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; }
+.title-detail-page .episode-number-grid::-webkit-scrollbar { display:none; }
+.title-detail-page .episode-number-button { flex:0 0 calc((100% - 40px)/6); min-width:0; scroll-snap-align:start; }
+@media (min-width:651px) {
+  .home-korean-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .home-today-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .home-today-loading .poster-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+}
+
 /**
  * Using the elevate system.
  * Automatic contrast adjustment.

@@ -20,6 +20,10 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Discover movies or television series
  */
+export const getCatalogQueryOriginalLanguageMin = 2;
+export const getCatalogQueryOriginalLanguageMax = 2;
+
+export const getCatalogQueryReleaseDateLteRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const getCatalogQuerySortByDefault = `popularity.desc`;
 export const getCatalogQueryPageDefault = 1;
 
@@ -29,11 +33,49 @@ export const GetCatalogQueryParams = zod.object({
   "mediaType": zod.enum(['movie', 'tv']),
   "genreId": zod.coerce.number().int().optional(),
   "year": zod.coerce.number().int().optional(),
+  "originalLanguage": zod.coerce.string().min(getCatalogQueryOriginalLanguageMin).max(getCatalogQueryOriginalLanguageMax).optional(),
+  "releaseDateLte": zod.coerce.string().regex(getCatalogQueryReleaseDateLteRegExp).optional(),
   "sortBy": zod.enum(['popularity.desc', 'release_date.desc', 'vote_average.desc']).default(getCatalogQuerySortByDefault),
   "page": zod.coerce.number().int().min(1).default(getCatalogQueryPageDefault)
 })
 
 export const GetCatalogResponse = zod.object({
+  "page": zod.number().int(),
+  "totalPages": zod.number().int(),
+  "totalResults": zod.number().int(),
+  "results": zod.array(zod.object({
+  "id": zod.number().int(),
+  "mediaType": zod.enum(['movie', 'tv']),
+  "title": zod.string(),
+  "overview": zod.string(),
+  "posterPath": zod.string().nullable(),
+  "backdropPath": zod.string().nullable(),
+  "voteAverage": zod.number(),
+  "releaseDate": zod.string().nullable(),
+  "genreIds": zod.array(zod.number().int()),
+  "originalLanguage": zod.string()
+}))
+})
+
+
+/**
+ * @summary Get titles released or airing on a date
+ */
+export const getTodayQueryDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getTodayQueryMediaTypeDefault = `all`;
+export const getTodayQueryOriginalLanguageMin = 2;
+export const getTodayQueryOriginalLanguageMax = 2;
+
+
+
+export const GetTodayQueryParams = zod.object({
+  "date": zod.coerce.string().regex(getTodayQueryDateRegExp),
+  "mediaType": zod.enum(['all', 'movie', 'tv']).default(getTodayQueryMediaTypeDefault),
+  "genreId": zod.coerce.number().int().optional(),
+  "originalLanguage": zod.coerce.string().min(getTodayQueryOriginalLanguageMin).max(getTodayQueryOriginalLanguageMax).optional()
+})
+
+export const GetTodayResponse = zod.object({
   "page": zod.number().int(),
   "totalPages": zod.number().int(),
   "totalResults": zod.number().int(),
