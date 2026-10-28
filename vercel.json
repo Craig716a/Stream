@@ -1,3 +1,8 @@
 {
-  "outputDirectory": "artifacts/stream-world/dist/public"
+  "outputDirectory": "artifacts/stream-world/dist/public",
+  "functions": {
+    "api/[...path].ts": {
+      "runtime": "nodejs22.x"
+    }
+  }
 }
