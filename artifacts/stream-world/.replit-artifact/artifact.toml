@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Stream World"
+description = "A worldwide streaming discovery app inspired by the supplied mobile references. Browse movies and series, filter categories and charts, explore numbered TV episodes, manage favorites and history, and use TMDb metadata and provider availability without locking the catalog to one country."
+version = "1.0.0"
+id = "artifacts/stream-world"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21819
+
+[services.development]
+run = "pnpm --filter @workspace/stream-world run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/stream-world", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/stream-world/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21819"
+BASE_PATH = "/"

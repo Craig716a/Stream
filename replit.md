@@ -1,6 +1,6 @@
-# [Project name]
+# Stream World
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A worldwide movie and series discovery app inspired by the user's streaming-app screenshots.
 
 ## Run & Operate
 
@@ -9,7 +9,8 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required secret: `TMDB_API_KEY` — TMDb v3 API key, server-side only
+- Required env: `DATABASE_URL` — Postgres connection string (workspace template)
 
 ## Stack
 
@@ -22,23 +23,34 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/stream-world` — user-facing discovery app
+- `artifacts/api-server/src/routes/tmdb.ts` — server-side TMDb API
+- `lib/api-spec/openapi.yaml` — API contract and generated client source
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- TMDb requests stay server-side; `TMDB_API_KEY` must only be stored in Replit Secrets.
+- The catalog is global and has no hardcoded country filter; provider availability is shown by region because TMDb reports it that way.
+- TMDb provides metadata and trailer references, not full episode streams; the player must label previews clearly and never claim full-episode playback.
+- Favorites, history, and language preferences are local to the current browser until account sync is requested.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Browse worldwide movies and series by home recommendations, trending lists, genre, year, and sort order.
+- Open title details with seasons, exact numbered episodes, cast, favorites, and “More Like This” recommendations.
+- Keep “You may also like” items in the requested two-column layout.
+- Show streaming provider availability by country, with a worldwide view available by default.
+- Navigate through Home, Streaming, Categories, Sharing, and Me.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Follow the supplied reference screenshots closely; the player itself may use a different design.
+- Keep the catalog worldwide, not restricted to one region.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Regenerate the API client after changing `lib/api-spec/openapi.yaml`.
+- Provider availability is inherently region-specific even though catalog discovery is worldwide.
 
 ## Pointers
 

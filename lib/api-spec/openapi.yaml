@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: catalog
+    description: Worldwide movie and series discovery through TMDb
 paths:
   /healthz:
     get:
@@ -24,6 +26,245 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /tmdb/discover:
+    get:
+      operationId: getCatalog
+      tags: [catalog]
+      summary: Discover movies or television series
+      parameters:
+        - name: mediaType
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: genreId
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [popularity.desc, release_date.desc, vote_average.desc]
+            default: popularity.desc
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: Matching titles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogPage"
+        "503":
+          description: TMDb is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /tmdb/trending:
+    get:
+      operationId: getTrending
+      tags: [catalog]
+      summary: Get trending worldwide titles
+      parameters:
+        - name: mediaType
+          in: query
+          schema:
+            type: string
+            enum: [all, movie, tv]
+            default: all
+        - name: timeWindow
+          in: query
+          schema:
+            type: string
+            enum: [day, week]
+            default: week
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: Trending titles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogPage"
+        "503":
+          description: TMDb is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /tmdb/search:
+    get:
+      operationId: searchCatalog
+      tags: [catalog]
+      summary: Search movies and television series
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: Matching movies and series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogPage"
+  /tmdb/providers:
+    get:
+      operationId: getProviderCatalog
+      tags: [catalog]
+      summary: Get supported streaming providers for a media type
+      parameters:
+        - name: mediaType
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/MediaType"
+      responses:
+        "200":
+          description: Provider catalog with worldwide region rankings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchProvider"
+  /tmdb/title/{mediaType}/{id}:
+    get:
+      operationId: getTitleDetails
+      tags: [catalog]
+      summary: Get a title and its seasons
+      parameters:
+        - name: mediaType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Title details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TitleDetails"
+        "404":
+          description: Title not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /tmdb/title/{mediaType}/{id}/season/{seasonNumber}:
+    get:
+      operationId: getSeasonDetails
+      tags: [catalog]
+      summary: Get episodes for a television season
+      parameters:
+        - name: mediaType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [tv]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: seasonNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Season and numbered episodes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeasonDetails"
+        "404":
+          description: Season not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /tmdb/title/{mediaType}/{id}/providers:
+    get:
+      operationId: getTitleProviders
+      tags: [catalog]
+      summary: Get streaming providers across all available regions
+      parameters:
+        - name: mediaType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Provider availability grouped by region
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderRegion"
+  /tmdb/title/{mediaType}/{id}/recommendations:
+    get:
+      operationId: getTitleRecommendations
+      tags: [catalog]
+      summary: Get related movies or television series
+      parameters:
+        - name: mediaType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Related titles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogPage"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +274,151 @@ components:
           type: string
       required:
         - status
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    MediaType:
+      type: string
+      enum: [movie, tv]
+    CatalogMediaItem:
+      type: object
+      properties:
+        id: { type: integer }
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        title: { type: string }
+        overview: { type: string }
+        posterPath: { type: ["string", "null"] }
+        backdropPath: { type: ["string", "null"] }
+        voteAverage: { type: number }
+        releaseDate: { type: ["string", "null"] }
+        genreIds:
+          type: array
+          items: { type: integer }
+        originalLanguage: { type: string }
+      required: [id, mediaType, title, overview, posterPath, backdropPath, voteAverage, releaseDate, genreIds, originalLanguage]
+    CatalogPage:
+      type: object
+      properties:
+        page: { type: integer }
+        totalPages: { type: integer }
+        totalResults: { type: integer }
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogMediaItem"
+      required: [page, totalPages, totalResults, results]
+    Genre:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+      required: [id, name]
+    SeasonSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        seasonNumber: { type: integer }
+        name: { type: string }
+        episodeCount: { type: integer }
+        posterPath: { type: ["string", "null"] }
+        airDate: { type: ["string", "null"] }
+      required: [id, seasonNumber, name, episodeCount, posterPath, airDate]
+    CastMember:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        character: { type: string }
+        profilePath: { type: ["string", "null"] }
+      required: [id, name, character, profilePath]
+    TitleDetails:
+      type: object
+      properties:
+        id: { type: integer }
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        title: { type: string }
+        overview: { type: string }
+        posterPath: { type: ["string", "null"] }
+        backdropPath: { type: ["string", "null"] }
+        voteAverage: { type: number }
+        releaseDate: { type: ["string", "null"] }
+        trailerKey: { type: ["string", "null"] }
+        trailerName: { type: ["string", "null"] }
+        genres:
+          type: array
+          items:
+            $ref: "#/components/schemas/Genre"
+        runtime: { type: ["integer", "null"] }
+        numberOfSeasons: { type: ["integer", "null"] }
+        numberOfEpisodes: { type: ["integer", "null"] }
+        lastEpisodeNumber: { type: ["integer", "null"] }
+        lastEpisodeName: { type: ["string", "null"] }
+        status: { type: ["string", "null"] }
+        seasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/SeasonSummary"
+        cast:
+          type: array
+          items:
+            $ref: "#/components/schemas/CastMember"
+      required: [id, mediaType, title, overview, posterPath, backdropPath, voteAverage, releaseDate, trailerKey, trailerName, genres, runtime, numberOfSeasons, numberOfEpisodes, lastEpisodeNumber, lastEpisodeName, status, seasons, cast]
+    Episode:
+      type: object
+      properties:
+        id: { type: integer }
+        episodeNumber: { type: integer }
+        name: { type: string }
+        overview: { type: string }
+        stillPath: { type: ["string", "null"] }
+        airDate: { type: ["string", "null"] }
+        runtime: { type: ["integer", "null"] }
+        voteAverage: { type: number }
+      required: [id, episodeNumber, name, overview, stillPath, airDate, runtime, voteAverage]
+    SeasonDetails:
+      type: object
+      properties:
+        id: { type: integer }
+        seasonNumber: { type: integer }
+        name: { type: string }
+        overview: { type: string }
+        posterPath: { type: ["string", "null"] }
+        airDate: { type: ["string", "null"] }
+        episodeCount: { type: integer }
+        episodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Episode"
+      required: [id, seasonNumber, name, overview, posterPath, airDate, episodeCount, episodes]
+    WatchProvider:
+      type: object
+      properties:
+        providerId: { type: integer }
+        name: { type: string }
+        logoPath: { type: ["string", "null"] }
+        displayPriority: { type: integer }
+      required: [providerId, name, logoPath, displayPriority]
+    ProviderRegion:
+      type: object
+      properties:
+        iso3166_1: { type: string }
+        link: { type: ["string", "null"] }
+        flatrate:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchProvider"
+        rent:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchProvider"
+        buy:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchProvider"
+      required: [iso3166_1, link, flatrate, rent, buy]
 
