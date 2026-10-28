@@ -136,6 +136,12 @@ export interface WatchProvider {
   displayPriority: number;
 }
 
+export interface ProviderRegionOption {
+  iso3166_1: string;
+  englishName: string;
+  nativeName: string;
+}
+
 export interface ProviderRegion {
   iso3166_1: string;
   /** @nullable */
@@ -158,6 +164,14 @@ originalLanguage?: string;
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 releaseDateLte?: string;
+/**
+ * @minimum 1
+ */
+watchProviderId?: number;
+/**
+ * @pattern ^[A-Z]{2}$
+ */
+watchRegion?: string;
 sortBy?: GetCatalogSortBy;
 /**
  * @minimum 1
@@ -236,5 +250,9 @@ page?: number;
 
 export type GetProviderCatalogParams = {
 mediaType: MediaType;
+/**
+ * @pattern ^[A-Z]{2}$
+ */
+watchRegion?: string;
 };
 

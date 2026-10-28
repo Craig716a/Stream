@@ -21,6 +21,14 @@ originalLanguage?: string;
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 releaseDateLte?: string;
+/**
+ * @minimum 1
+ */
+watchProviderId?: number;
+/**
+ * @pattern ^[A-Z]{2}$
+ */
+watchRegion?: string;
 sortBy?: GetCatalogSortBy;
 /**
  * @minimum 1

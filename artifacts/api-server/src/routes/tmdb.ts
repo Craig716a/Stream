@@ -197,6 +197,15 @@ function mapProvider(value: unknown): JsonRecord {
   };
 }
 
+function mapProviderRegionOption(value: unknown): JsonRecord {
+  const region = record(value);
+  return {
+    iso3166_1: string(region.iso_3166_1),
+    englishName: string(region.english_name),
+    nativeName: string(region.native_name),
+  };
+}
+
 function mapProviderRegion(iso: string, value: unknown): JsonRecord {
   const region = record(value);
   return {
@@ -250,6 +259,8 @@ router.get("/tmdb/discover", async (req, res): Promise<void> => {
         query.mediaType === "movie" ? query.releaseDateLte : undefined,
       "first_air_date.lte":
         query.mediaType === "tv" ? query.releaseDateLte : undefined,
+      with_watch_providers: query.watchProviderId,
+      watch_region: query.watchRegion,
       include_adult: "false",
     });
     res.json(GetCatalogResponse.parse(mapPage(raw, query.mediaType)));
@@ -372,6 +383,7 @@ router.get("/tmdb/providers", async (req, res): Promise<void> => {
     const raw = record(
       await getTmdb(`/watch/providers/${parsed.data.mediaType}`, {
         language: "en-US",
+        watch_region: parsed.data.watchRegion,
       }),
     );
     const providers = array(raw.results)
@@ -381,6 +393,23 @@ router.get("/tmdb/providers", async (req, res): Promise<void> => {
           number(a.displayPriority) - number(b.displayPriority),
       );
     res.json(GetProviderCatalogResponse.parse(providers));
+  } catch (error) {
+    sendTmdbError(req, res, error);
+  }
+});
+
+router.get("/tmdb/provider-regions", async (req, res): Promise<void> => {
+  try {
+    const raw = record(
+      await getTmdb("/watch/providers/regions", { language: "en-US" }),
+    );
+    const regions = array(raw.results)
+      .map(mapProviderRegionOption)
+      .filter((region) => string(region.iso3166_1).length === 2)
+      .sort((a, b) =>
+        string(a.englishName).localeCompare(string(b.englishName)),
+      );
+    res.json(regions);
   } catch (error) {
     sendTmdbError(req, res, error);
   }
