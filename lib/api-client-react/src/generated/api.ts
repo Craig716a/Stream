@@ -30,6 +30,7 @@ import type {
   HealthStatus,
   MediaType,
   ProviderRegion,
+  ProviderRegionOption,
   SearchCatalogParams,
   SeasonDetails,
   TitleDetails,
@@ -693,6 +694,107 @@ export function useGetProviderCatalog<TData = Awaited<ReturnType<typeof getProvi
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetProviderCatalogQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetProviderRegionsUrl = () => {
+
+
+
+
+  return `/api/tmdb/provider-regions`
+}
+
+/**
+ * @summary Get countries supported by TMDb watch providers
+ */
+export const getProviderRegions = async ( options?: Parameters<typeof customFetch>[1]): Promise<ProviderRegionOption[]> => {
+
+  return customFetch<ProviderRegionOption[]>(getGetProviderRegionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProviderRegionsQueryKey = () => {
+    return [
+    `/api/tmdb/provider-regions`
+    ] as const;
+    }
+
+
+export const getGetProviderRegionsQueryOptions = <TData = Awaited<ReturnType<typeof getProviderRegions>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProviderRegionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProviderRegions>>> = ({ signal }) => getProviderRegions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProviderRegions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetProviderRegionsQueryResult = NonNullable<Awaited<ReturnType<typeof getProviderRegions>>>
+export type GetProviderRegionsQueryError = ErrorType<unknown>
+
+
+export function useGetProviderRegions<TData = Awaited<ReturnType<typeof getProviderRegions>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProviderRegions>>,
+          TError,
+          Awaited<ReturnType<typeof getProviderRegions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetProviderRegions<TData = Awaited<ReturnType<typeof getProviderRegions>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProviderRegions>>,
+          TError,
+          Awaited<ReturnType<typeof getProviderRegions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetProviderRegions<TData = Awaited<ReturnType<typeof getProviderRegions>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get countries supported by TMDb watch providers
+ */
+
+export function useGetProviderRegions<TData = Awaited<ReturnType<typeof getProviderRegions>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetProviderRegionsQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

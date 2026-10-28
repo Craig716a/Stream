@@ -9,4 +9,8 @@ import type { MediaType } from './mediaType';
 
 export type GetProviderCatalogParams = {
 mediaType: MediaType;
+/**
+ * @pattern ^[A-Z]{2}$
+ */
+watchRegion?: string;
 };

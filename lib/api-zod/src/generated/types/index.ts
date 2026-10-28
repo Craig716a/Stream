@@ -23,6 +23,7 @@ export * from './getTrendingTimeWindow';
 export * from './healthStatus';
 export * from './mediaType';
 export * from './providerRegion';
+export * from './providerRegionOption';
 export * from './searchCatalogParams';
 export * from './seasonDetails';
 export * from './seasonSummary';

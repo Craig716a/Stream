@@ -1,10 +1,10 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  useGetCatalog, useGetProviderCatalog, useGetSeasonDetails, useGetTitleDetails, useGetToday,
+  useGetCatalog, useGetProviderCatalog, useGetProviderRegions, useGetSeasonDetails, useGetTitleDetails, useGetToday,
   useGetTitleProviders, useGetTitleRecommendations, useGetTrending, useSearchCatalog,
   getGetCatalogQueryKey, getGetProviderCatalogQueryKey, getGetSeasonDetailsQueryKey,
-  getGetTitleDetailsQueryKey, getGetTitleProvidersQueryKey, getGetTitleRecommendationsQueryKey, getGetTodayQueryKey, getGetTrendingQueryKey,
+  getGetProviderRegionsQueryKey, getGetTitleDetailsQueryKey, getGetTitleProvidersQueryKey, getGetTitleRecommendationsQueryKey, getGetTodayQueryKey, getGetTrendingQueryKey,
   getSearchCatalogQueryKey,
 } from '@workspace/api-client-react';
 import type { CatalogMediaItem, MediaType, ProviderRegion, WatchProvider } from '@workspace/api-client-react';
@@ -51,6 +51,10 @@ const uniqueTitles = (items: CatalogMediaItem[]) => items.filter((item, index) =
 );
 const safeRead = <T,>(key: string, fallback: T): T => {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
+};
+const initialProviderRegion = () => {
+  const locale = typeof navigator === 'undefined' ? 'en-US' : navigator.language;
+  return locale.match(/-([a-z]{2})(?:-|$)/i)?.[1]?.toUpperCase() || 'US';
 };
 function useSaved<T,>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => safeRead(key, initial));
@@ -116,6 +120,7 @@ function HomePage() {
   const [homeTab, setHomeTab] = useState<HomeCategory>('Recommend');
   const [featureIndex, setFeatureIndex] = useState(0);
   const [catalogPage, setCatalogPage] = useState(1);
+  const [providerRegion] = useSaved('stream-world-provider-region', initialProviderRegion());
   const [relatedPage, setRelatedPage] = useState(1);
   const today = localToday();
   const media: MediaType = homeTab === 'Movies' ? 'movie' : 'tv';
@@ -130,9 +135,11 @@ function HomePage() {
   const todayTitles = useGetToday(todayParams, { query: { queryKey: getGetTodayQueryKey(todayParams) } });
   const koreanParams = { mediaType: 'tv' as const, genreId: 18, originalLanguage: 'ko', releaseDateLte: today, sortBy: 'release_date.desc' as const, page: 1 };
   const koreanTitles = useGetCatalog(koreanParams, { query: { queryKey: getGetCatalogQueryKey(koreanParams), enabled: homeTab === 'Recommend' || homeTab === 'TV Shows' } });
-  const movies = useGetProviderCatalog({ mediaType: 'movie' }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'movie' }) } });
-  const tvProviders = useGetProviderCatalog({ mediaType: 'tv' }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'tv' }) } });
-  const providers = [...(movies.data || []), ...(tvProviders.data || [])].filter((provider, index, list) => list.findIndex(item => item.providerId === provider.providerId) === index);
+  const movies = useGetProviderCatalog({ mediaType: 'movie', watchRegion: providerRegion }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'movie', watchRegion: providerRegion }) } });
+  const tvProviders = useGetProviderCatalog({ mediaType: 'tv', watchRegion: providerRegion }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'tv', watchRegion: providerRegion }) } });
+  const providers = [...(movies.data || []), ...(tvProviders.data || [])]
+    .filter((provider, index, list) => list.findIndex(item => item.providerId === provider.providerId) === index)
+    .sort((a, b) => a.displayPriority - b.displayPriority);
   const matchesCategory = (item: CatalogMediaItem) =>
     (!genreId || item.genreIds.includes(genreId)) &&
     (!originalLanguage || item.originalLanguage === originalLanguage);
@@ -175,7 +182,7 @@ function HomePage() {
       <div className="home-action-pair"><button onClick={changePicks} {...test('button-more-wonderful')}><ListFilter size={16} /> More Wonderful</button><button onClick={changePicks} {...test('button-change-recommendations')}><SlidersHorizontal size={16} /> Change</button></div>
     </div>
     <section className="home-streaming"><div className="section-toolbar"><h2>Streaming services</h2><Link href="/streaming" className="text-link" {...test('link-streaming-services')}>Explore <ChevronRight size={15} /></Link></div>
-      <div className="provider-row">{providers.slice(0, 10).map((provider: WatchProvider) => <div className="provider-tile" key={provider.providerId} {...test(`home-provider-${provider.providerId}`)}>{provider.logoPath ? <img src={posterUrl(provider.logoPath)} alt="" /> : <span className="provider-initial">{provider.name.slice(0, 1)}</span>}<span>{provider.name}</span></div>)}</div>
+      <div className="provider-row">{providers.slice(0, 10).map((provider: WatchProvider) => <Link href={`/streaming/${provider.providerId}`} className="provider-tile" key={provider.providerId} {...test(`home-provider-${provider.providerId}`)} aria-label={`Browse ${provider.name}`} >{provider.logoPath ? <img src={posterUrl(provider.logoPath)} alt="" /> : <span className="provider-initial">{provider.name.slice(0, 1)}</span>}<span>{provider.name}</span></Link>)}</div>
     </section>
   </div>;
 }
@@ -189,8 +196,50 @@ function RecommendCard({ item, episodeBadge, badge }: { item: CatalogMediaItem; 
 }
 
 function StreamingPage() {
+  const params = useParams<{ providerId?: string }>();
   const [chart, setChart] = useState<'hot' | 'soaring' | 'new' | 'search'>('hot');
   const [media, setMedia] = useState<'all' | 'movie' | 'tv'>('all');
+  const [providerMedia, setProviderMedia] = useState<'movie' | 'tv'>('movie');
+  const [providerPage, setProviderPage] = useState(1);
+  const [providerRegion, setProviderRegion] = useSaved('stream-world-provider-region', initialProviderRegion());
+  const providerRegions = useGetProviderRegions({ query: { queryKey: getGetProviderRegionsQueryKey() } });
+  const movieProviders = useGetProviderCatalog({ mediaType: 'movie', watchRegion: providerRegion }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'movie', watchRegion: providerRegion }) } });
+  const tvProviders = useGetProviderCatalog({ mediaType: 'tv', watchRegion: providerRegion }, { query: { queryKey: getGetProviderCatalogQueryKey({ mediaType: 'tv', watchRegion: providerRegion }) } });
+  const providers = [...(movieProviders.data || []), ...(tvProviders.data || [])]
+    .filter((provider, index, list) => list.findIndex(item => item.providerId === provider.providerId) === index)
+    .sort((a, b) => a.displayPriority - b.displayPriority);
+  const activeProviderId = Number(params.providerId);
+  const hasActiveProvider = Number.isInteger(activeProviderId) && activeProviderId > 0;
+  const activeProvider = providers.find(provider => provider.providerId === activeProviderId);
+  const providerCatalogParams = {
+    mediaType: providerMedia,
+    watchProviderId: hasActiveProvider ? activeProviderId : undefined,
+    watchRegion: providerRegion,
+    sortBy: 'popularity.desc' as const,
+    page: providerPage,
+  };
+  const providerTitles = useGetCatalog(providerCatalogParams, {
+    query: {
+      enabled: hasActiveProvider,
+      queryKey: getGetCatalogQueryKey(providerCatalogParams),
+    },
+  });
+  const selectedRegionName = providerRegions.data?.find(region => region.iso3166_1 === providerRegion)?.englishName || providerRegion;
+  const regionSelect = <label className="provider-region-select"><span>Available in</span><select value={providerRegion} onChange={event => { setProviderRegion(event.target.value); setProviderPage(1); }} aria-label="Select streaming availability region" {...test('select-streaming-region')}>
+    {providerRegions.data?.map(region => <option key={region.iso3166_1} value={region.iso3166_1}>{region.englishName}</option>)}
+    {!providerRegions.data?.some(region => region.iso3166_1 === providerRegion) && <option value={providerRegion}>{selectedRegionName}</option>}
+  </select><ChevronDown size={14} /></label>;
+  if (hasActiveProvider) {
+    return <div className="page-wrap streaming-page provider-page">
+      <PageHeading title={activeProvider?.name || 'Streaming service'} action={<Link href="/streaming" className="text-link" {...test('link-all-streaming-services')}><ArrowLeft size={14} /> All services</Link>} />
+      <div className="provider-page-controls"><p>Movies available on {activeProvider?.name || 'this service'} in {selectedRegionName}.</p>{regionSelect}</div>
+      <div className="provider-media-tabs"><PillRow options={[{ label: 'Movies', value: 'movie' }, { label: 'Series', value: 'tv' }]} value={providerMedia} onChange={value => { setProviderMedia(value as 'movie' | 'tv'); setProviderPage(1); }} testId="filter-provider-media" /></div>
+      {providerTitles.isLoading ? <LoadingGrid /> : providerTitles.isError ? <QueryError retry={() => providerTitles.refetch()} /> : <><div className="provider-result-count">{providerTitles.data?.totalResults.toLocaleString() || 0} titles in {selectedRegionName}</div>
+        {providerTitles.data?.results.length ? <div className="ranked-grid streaming-grid">{providerTitles.data.results.map(item => <PosterCard key={`${item.mediaType}-${item.id}`} item={item} />)}</div> : <EmptyState title="No titles for this service" copy={`TMDb has no ${providerMedia === 'movie' ? 'movies' : 'series'} listed for ${activeProvider?.name || 'this service'} in ${selectedRegionName}. Try another region.`} />}
+        {!!providerTitles.data?.totalPages && providerTitles.data.totalPages > 1 && <div className="provider-pagination"><button className="button-secondary" disabled={providerPage <= 1} onClick={() => setProviderPage(page => Math.max(1, page - 1))} {...test('button-provider-previous')}>Previous</button><span>Page {providerPage} of {providerTitles.data.totalPages}</span><button className="button-secondary" disabled={providerPage >= providerTitles.data.totalPages} onClick={() => setProviderPage(page => Math.min(providerTitles.data?.totalPages || page, page + 1))} {...test('button-provider-next')}>Next</button></div>}
+      </>}
+    </div>;
+  }
   const today = localToday();
   const trendParams = { mediaType: media, timeWindow: chart === 'search' ? 'day' as const : 'week' as const };
   const trend = useGetTrending(trendParams, { query: { queryKey: getGetTrendingQueryKey(trendParams), enabled: chart === 'hot' || chart === 'search' } });
@@ -205,6 +254,10 @@ function StreamingPage() {
   const retry = () => (chart === 'hot' || chart === 'search') ? trend.refetch() : catalog.refetch();
   return <div className="page-wrap streaming-page">
     <PageHeading title="Streaming" />
+    <section className="provider-browser-section">
+      <div className="provider-browser-heading"><div><h2>Streaming services</h2><p>Browse TMDb-listed services and see what’s available in your region.</p></div>{regionSelect}</div>
+      {movieProviders.isLoading || tvProviders.isLoading ? <div className="provider-browser-loading"><div className="provider-skeletons"><i /><i /><i /><i /><i /></div></div> : movieProviders.isError || tvProviders.isError ? <QueryError retry={() => { void movieProviders.refetch(); void tvProviders.refetch(); }} /> : providers.length ? <div className="provider-browser-grid">{providers.map(provider => <Link href={`/streaming/${provider.providerId}`} className="provider-browser-tile" key={provider.providerId} {...test(`streaming-provider-${provider.providerId}`)}>{provider.logoPath ? <img src={posterUrl(provider.logoPath)} alt="" loading="lazy" /> : <span className="provider-browser-initial">{provider.name.slice(0, 1)}</span>}<span>{provider.name}</span></Link>)}</div> : <EmptyState title="No services found" copy={`TMDb doesn’t list streaming services for ${selectedRegionName}. Try another region.`} />}
+    </section>
     <div className="chart-tabs">
       {([['hot', 'Hot Chart', 'tab-hot-chart'], ['soaring', 'Soaring List', 'tab-soaring-list'], ['new', 'New List', 'tab-new-list'], ['search', 'Hot Search', 'tab-hot-search']] as const).map(([value, label, id]) => <button key={value} className={chart === value ? 'chart-tab active' : 'chart-tab'} onClick={() => setChart(value)} {...test(id)}>{label}</button>)}
     </div>
@@ -365,6 +418,14 @@ function TitlePage() {
     } catch { /* Share sheet dismissed. */ }
   };
   const openPlayer = () => setLocation(`/player/${mediaType}/${id}/${selectedSeason}/${selectedEpisode}`);
+  const selectedSeasonSummary = title.seasons.find(season => season.seasonNumber === selectedSeason);
+  const seasonEpisodeCount = seasonQuery.data
+    ? Math.max(
+      seasonQuery.data.episodeCount,
+      ...seasonQuery.data.episodes.map(episode => episode.episodeNumber),
+      0,
+    )
+    : selectedSeasonSummary?.episodeCount || 0;
   return <div className="title-page title-detail-page">
     <section className="title-trailer">
       {title.trailerKey && trailerStarted
@@ -386,8 +447,8 @@ function TitlePage() {
       <div className="audio-track-row"><span>Language</span><div className="track-switch">{(['Original', 'Dub'] as const).map(track => <button key={track} className={audioTrack === track ? 'selected' : ''} onClick={() => setAudioTrack(track)} {...test(`button-audio-${track.toLowerCase()}`)}>{track}</button>)}</div></div>
       {audioTrack === 'Dub' && <p className="audio-note">Audio tracks are not supplied by TMDb; this setting is a preference only.</p>}
       {mediaType === 'tv' && <section className="episode-picker">
-        <div className="episode-picker-head"><label className="season-picker"><select value={selectedSeason} onChange={e => { setSeasonNumber(Number(e.target.value)); setSelectedEpisode(1); }} aria-label="Select season" {...test('select-season')}>{(title.seasons || []).filter(season => season.seasonNumber >= 0).map(season => <option key={season.id} value={season.seasonNumber}>{season.name || `Season ${season.seasonNumber}`}</option>)}</select><ChevronDown size={14} /></label>
-          {title.lastEpisodeNumber && <span className="update-count">Update to {title.lastEpisodeNumber} <ChevronRight size={14} /></span>}</div>
+        <div className="episode-picker-head"><label className="season-picker"><select value={selectedSeason} onChange={e => { setSeasonNumber(Number(e.target.value)); setSelectedEpisode(1); }} aria-label="Select season" {...test('select-season')}>{(title.seasons || []).filter(season => season.seasonNumber >= 0).map(season => <option key={season.id} value={season.seasonNumber}>{season.seasonNumber === 0 ? 'Specials' : `Season ${season.seasonNumber}`}</option>)}</select><ChevronDown size={14} /></label>
+          {seasonEpisodeCount > 0 && <span className="update-count">Update to {seasonEpisodeCount} <ChevronRight size={14} /></span>}</div>
         {seasonQuery.isLoading ? <div className="number-skeletons"><i /><i /><i /><i /><i /><i /></div> : seasonQuery.isError ? <QueryError retry={() => seasonQuery.refetch()} /> : seasonQuery.data?.episodes?.length ? <div className="episode-number-grid" aria-label="Episodes; swipe horizontally to see more">{seasonQuery.data.episodes.map(ep => <button className={selectedEpisode === ep.episodeNumber ? 'episode-number-button selected' : 'episode-number-button'} key={ep.id} onClick={() => setSelectedEpisode(ep.episodeNumber)} aria-label={`Episode ${ep.episodeNumber}: ${ep.name}`} {...test(`button-episode-${ep.episodeNumber}`)}>{ep.episodeNumber}</button>)}</div> : <EmptyState title="No episodes listed" copy="Episode details will appear when available." />}
       </section>}
       <section className="similar-section title-more-like"><div className="section-toolbar"><h2>More Like This</h2><Link href="/categories" className="text-link" {...test('link-more-like-this')}>More <ChevronRight size={14} /></Link></div>
@@ -420,6 +481,7 @@ function PlayerPage() {
 function RouteContent() {
   return <Switch>
     <Route path="/" component={HomePage} />
+    <Route path="/streaming/:providerId" component={StreamingPage} />
     <Route path="/streaming" component={StreamingPage} />
     <Route path="/categories" component={CategoriesPage} />
     <Route path="/sharing" component={SharingPage} />

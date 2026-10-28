@@ -24,6 +24,8 @@ export const getCatalogQueryOriginalLanguageMin = 2;
 export const getCatalogQueryOriginalLanguageMax = 2;
 
 export const getCatalogQueryReleaseDateLteRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+export const getCatalogQueryWatchRegionRegExp = new RegExp('^[A-Z]{2}$');
 export const getCatalogQuerySortByDefault = `popularity.desc`;
 export const getCatalogQueryPageDefault = 1;
 
@@ -35,6 +37,8 @@ export const GetCatalogQueryParams = zod.object({
   "year": zod.coerce.number().int().optional(),
   "originalLanguage": zod.coerce.string().min(getCatalogQueryOriginalLanguageMin).max(getCatalogQueryOriginalLanguageMax).optional(),
   "releaseDateLte": zod.coerce.string().regex(getCatalogQueryReleaseDateLteRegExp).optional(),
+  "watchProviderId": zod.coerce.number().int().min(1).optional(),
+  "watchRegion": zod.coerce.string().regex(getCatalogQueryWatchRegionRegExp).optional(),
   "sortBy": zod.enum(['popularity.desc', 'release_date.desc', 'vote_average.desc']).default(getCatalogQuerySortByDefault),
   "page": zod.coerce.number().int().min(1).default(getCatalogQueryPageDefault)
 })
@@ -163,8 +167,12 @@ export const SearchCatalogResponse = zod.object({
 /**
  * @summary Get supported streaming providers for a media type
  */
+export const getProviderCatalogQueryWatchRegionRegExp = new RegExp('^[A-Z]{2}$');
+
+
 export const GetProviderCatalogQueryParams = zod.object({
-  "mediaType": zod.enum(['movie', 'tv'])
+  "mediaType": zod.enum(['movie', 'tv']),
+  "watchRegion": zod.coerce.string().regex(getProviderCatalogQueryWatchRegionRegExp).optional()
 })
 
 export const GetProviderCatalogResponseItem = zod.object({
@@ -174,6 +182,17 @@ export const GetProviderCatalogResponseItem = zod.object({
   "displayPriority": zod.number().int()
 })
 export const GetProviderCatalogResponse = zod.array(GetProviderCatalogResponseItem)
+
+
+/**
+ * @summary Get countries supported by TMDb watch providers
+ */
+export const GetProviderRegionsResponseItem = zod.object({
+  "iso3166_1": zod.string(),
+  "englishName": zod.string(),
+  "nativeName": zod.string()
+})
+export const GetProviderRegionsResponse = zod.array(GetProviderRegionsResponseItem)
 
 
 /**
