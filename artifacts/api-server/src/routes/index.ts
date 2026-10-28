@@ -1,8 +1,8 @@
-import { Router, type IRouter } from "express";
-import healthRouter from "./health";
-import tmdbRouter from "./tmdb";
+import { Router } from "express";
+import healthRouter from "./health.js";
+import tmdbRouter from "./tmdb.js";
 
-const router: IRouter = Router();
+const router = Router();
 
 router.use(healthRouter);
 router.use(tmdbRouter);
