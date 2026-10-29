@@ -40,7 +40,7 @@ export async function getTmdb(
   url.searchParams.set("api_key", token);
   query.forEach((value, key) => url.searchParams.set(key, value));
 
-  const response = await fetch(url, {
+  const response: Awaited<ReturnType<typeof fetch>> = await fetch(url, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
   });
