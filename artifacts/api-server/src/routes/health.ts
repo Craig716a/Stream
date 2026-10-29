@@ -1,8 +1,12 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request } from "express";
+
+type JsonResponse = {
+  json: (body: unknown) => void;
+};
 
 const router = Router();
 
-router.get("/healthz", (_req: Request, res: Response) => {
+router.get("/healthz", (_req: Request, res: JsonResponse) => {
   res.json({ status: "ok" });
 });
 

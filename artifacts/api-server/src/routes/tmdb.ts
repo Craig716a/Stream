@@ -20,7 +20,7 @@ import {
   SearchCatalogResponse,
   type MediaType,
 } from "@workspace/api-zod";
-import { getTmdb, TmdbError } from "../lib/tmdb";
+import { getTmdb, TmdbError } from "../lib/tmdb.js";
 
 const router: IRouter = Router();
 type JsonRecord = Record<string, unknown>;
