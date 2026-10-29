@@ -21,6 +21,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AnimeMalId,
   ApiError,
   CatalogPage,
   GetCatalogParams,
@@ -904,6 +905,115 @@ export function useGetTitleDetails<TData = Awaited<ReturnType<typeof getTitleDet
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetTitleDetailsQueryOptions(mediaType,id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAnimeMalIdUrl = (mediaType: MediaType,
+    id: number,) => {
+
+
+
+
+  return `/api/tmdb/title/${mediaType}/${id}/anime-mal-id`
+}
+
+/**
+ * @summary Resolve a TMDb anime series to a MyAnimeList ID
+ */
+export const getAnimeMalId = async (mediaType: MediaType,
+    id: number, options?: Parameters<typeof customFetch>[1]): Promise<AnimeMalId> => {
+
+  return customFetch<AnimeMalId>(getGetAnimeMalIdUrl(mediaType,id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAnimeMalIdQueryKey = (mediaType: MediaType,
+    id: number,) => {
+    return [
+    `/api/tmdb/title/${mediaType}/${id}/anime-mal-id`
+    ] as const;
+    }
+
+
+export const getGetAnimeMalIdQueryOptions = <TData = Awaited<ReturnType<typeof getAnimeMalId>>, TError = ErrorType<ApiError>>(mediaType: MediaType,
+    id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnimeMalId>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAnimeMalIdQueryKey(mediaType,id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAnimeMalId>>> = ({ signal }) => getAnimeMalId(mediaType,id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: mediaType !== null && mediaType !== undefined && id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAnimeMalId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAnimeMalIdQueryResult = NonNullable<Awaited<ReturnType<typeof getAnimeMalId>>>
+export type GetAnimeMalIdQueryError = ErrorType<ApiError>
+
+
+export function useGetAnimeMalId<TData = Awaited<ReturnType<typeof getAnimeMalId>>, TError = ErrorType<ApiError>>(
+ mediaType: MediaType,
+    id: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnimeMalId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAnimeMalId>>,
+          TError,
+          Awaited<ReturnType<typeof getAnimeMalId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAnimeMalId<TData = Awaited<ReturnType<typeof getAnimeMalId>>, TError = ErrorType<ApiError>>(
+ mediaType: MediaType,
+    id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnimeMalId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAnimeMalId>>,
+          TError,
+          Awaited<ReturnType<typeof getAnimeMalId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAnimeMalId<TData = Awaited<ReturnType<typeof getAnimeMalId>>, TError = ErrorType<ApiError>>(
+ mediaType: MediaType,
+    id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnimeMalId>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Resolve a TMDb anime series to a MyAnimeList ID
+ */
+
+export function useGetAnimeMalId<TData = Awaited<ReturnType<typeof getAnimeMalId>>, TError = ErrorType<ApiError>>(
+ mediaType: MediaType,
+    id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAnimeMalId>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAnimeMalIdQueryOptions(mediaType,id,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -31,7 +31,7 @@ A worldwide movie and series discovery app inspired by the user's streaming-app 
 
 - TMDb requests stay server-side; `TMDB_API_KEY` must only be stored in Replit Secrets.
 - The catalog is global and has no hardcoded country filter; provider availability is shown by region because TMDb reports it that way.
-- TMDb provides metadata and trailer references, not full episode streams; the player must label previews clearly and never claim full-episode playback.
+- TMDb provides title metadata; the single inline detail-page player embeds Vidly, while anime playback uses a Wikidata TMDb-to-MyAnimeList ID mapping. Do not describe external playback as TMDb-provided.
 - Favorites, history, and language preferences are local to the current browser until account sync is requested.
 
 ## Product

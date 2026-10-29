@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './animeMalId';
 export * from './apiError';
 export * from './castMember';
 export * from './catalogMediaItem';

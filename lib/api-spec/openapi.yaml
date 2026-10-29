@@ -262,6 +262,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /tmdb/title/{mediaType}/{id}/anime-mal-id:
+    get:
+      operationId: getAnimeMalId
+      tags: [catalog]
+      summary: Resolve a TMDb anime series to a MyAnimeList ID
+      parameters:
+        - name: mediaType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Matched MyAnimeList ID, or null when no exact match is available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnimeMalId"
+        "404":
+          description: Title not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /tmdb/title/{mediaType}/{id}/season/{seasonNumber}:
     get:
       operationId: getSeasonDetails
@@ -416,6 +445,11 @@ components:
         character: { type: string }
         profilePath: { type: ["string", "null"] }
       required: [id, name, character, profilePath]
+    AnimeMalId:
+      type: object
+      properties:
+        malId: { type: ["integer", "null"] }
+      required: [malId]
     TitleDetails:
       type: object
       properties:

@@ -68,6 +68,11 @@ export interface CastMember {
   profilePath: string | null;
 }
 
+export interface AnimeMalId {
+  /** @nullable */
+  malId: number | null;
+}
+
 export interface TitleDetails {
   id: number;
   mediaType: MediaType;

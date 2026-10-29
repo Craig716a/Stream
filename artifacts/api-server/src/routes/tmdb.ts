@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import {
   GetCatalogQueryParams,
   GetCatalogResponse,
+  GetAnimeMalIdResponse,
   GetTodayQueryParams,
   GetProviderCatalogQueryParams,
   GetProviderCatalogResponse,
@@ -153,6 +154,53 @@ function mapTitle(value: unknown, type: MediaType): JsonRecord {
     seasons: array(title.seasons).map(mapSeasonSummary),
     cast: array(credits.cast).slice(0, 12).map(mapCast),
   };
+}
+
+type AnimeMalIdCacheEntry = {
+  expiresAt: number;
+  malId: number | null;
+};
+
+const animeMalIdCache = new Map<string, AnimeMalIdCacheEntry>();
+
+async function resolveAnimeMalId(tmdbId: number): Promise<number | null> {
+  const cacheKey = String(tmdbId);
+  const cached = animeMalIdCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.malId;
+
+  try {
+    const query = `SELECT DISTINCT ?malId WHERE {
+      ?series wdt:P4983 "${tmdbId}" ;
+        wdt:P4086 ?malId .
+    } LIMIT 10`;
+    const url = new URL("https://query.wikidata.org/sparql");
+    url.searchParams.set("query", query);
+    url.searchParams.set("format", "json");
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/sparql-results+json",
+        "User-Agent": "StreamWorld/1.0 (TMDb to MyAnimeList ID mapping)",
+      },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) throw new Error(`Wikidata returned HTTP ${response.status}`);
+
+    const payload = record(await response.json());
+    const results = array(record(payload.results).bindings).map(record);
+    const malIds = [...new Set(results
+      .map((binding) => Number(record(binding.malId).value))
+      .filter((value) => Number.isSafeInteger(value) && value > 0))];
+    const malId = malIds.length === 1 ? malIds[0] : null;
+
+    animeMalIdCache.set(cacheKey, {
+      malId,
+      expiresAt: Date.now() + (malId ? 24 * 60 * 60_000 : 60 * 60_000),
+    });
+    return malId;
+  } catch (error) {
+    animeMalIdCache.set(cacheKey, { malId: null, expiresAt: Date.now() + 60_000 });
+    throw error;
+  }
 }
 
 function mapEpisode(value: unknown): JsonRecord {
@@ -414,6 +462,49 @@ router.get("/tmdb/provider-regions", async (req, res): Promise<void> => {
     sendTmdbError(req, res, error);
   }
 });
+
+router.get(
+  "/tmdb/title/:mediaType/:id/anime-mal-id",
+  async (req, res): Promise<void> => {
+    const parsed = GetTitleDetailsParams.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const { id, mediaType: type } = parsed.data;
+
+    try {
+      if (type !== "tv") {
+        res.json(GetAnimeMalIdResponse.parse({ malId: null }));
+        return;
+      }
+
+      const raw = record(await getTmdb(`/tv/${id}`));
+      const isAnimated = array(raw.genres).some(
+        (genre) => number(record(genre).id) === 16,
+      );
+      if (!isAnimated) {
+        res.json(GetAnimeMalIdResponse.parse({ malId: null }));
+        return;
+      }
+
+      let malId: number | null = null;
+      try {
+        malId = await resolveAnimeMalId(
+          id,
+        );
+      } catch (error) {
+        req.log.warn(
+          { id, error: error instanceof Error ? error.message : String(error) },
+          "Wikidata MAL ID lookup unavailable",
+        );
+      }
+      res.json(GetAnimeMalIdResponse.parse({ malId }));
+    } catch (error) {
+      sendTmdbError(req, res, error);
+    }
+  },
+);
 
 router.get(
   "/tmdb/title/:mediaType/:id/season/:seasonNumber",

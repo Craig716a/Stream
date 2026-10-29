@@ -242,6 +242,19 @@ export const GetTitleDetailsResponse = zod.object({
 
 
 /**
+ * @summary Resolve a TMDb anime series to a MyAnimeList ID
+ */
+export const GetAnimeMalIdParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']),
+  "id": zod.coerce.number().int()
+})
+
+export const GetAnimeMalIdResponse = zod.object({
+  "malId": zod.number().int().nullable()
+})
+
+
+/**
  * @summary Get episodes for a television season
  */
 export const getSeasonDetailsPathSeasonNumberMin = 0;

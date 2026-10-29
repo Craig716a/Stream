@@ -1,9 +1,9 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  useGetCatalog, useGetProviderCatalog, useGetProviderRegions, useGetSeasonDetails, useGetTitleDetails, useGetToday,
+  useGetAnimeMalId, useGetCatalog, useGetProviderCatalog, useGetProviderRegions, useGetSeasonDetails, useGetTitleDetails, useGetToday,
   useGetTitleProviders, useGetTitleRecommendations, useGetTrending, useSearchCatalog,
-  getGetCatalogQueryKey, getGetProviderCatalogQueryKey, getGetSeasonDetailsQueryKey,
+  getGetAnimeMalIdQueryKey, getGetCatalogQueryKey, getGetProviderCatalogQueryKey, getGetSeasonDetailsQueryKey,
   getGetProviderRegionsQueryKey, getGetTitleDetailsQueryKey, getGetTitleProvidersQueryKey, getGetTitleRecommendationsQueryKey, getGetTodayQueryKey, getGetTrendingQueryKey,
   getSearchCatalogQueryKey,
 } from '@workspace/api-client-react';
@@ -380,11 +380,17 @@ function TitlePage() {
   const params = useParams<{ mediaType: string; id: string }>();
   const mediaType = params.mediaType === 'tv' ? 'tv' : 'movie';
   const id = Number(params.id);
-  const [, setLocation] = useLocation();
-  const [seasonNumber, setSeasonNumber] = useState(1);
-  const [selectedEpisode, setSelectedEpisode] = useState(1);
-  const [audioTrack, setAudioTrack] = useState<'Original' | 'Dub'>('Original');
-  const [trailerStartedForId, setTrailerStartedForId] = useState<number | null>(null);
+  const [seasonNumber, setSeasonNumber] = useState(() => {
+    const season = Number(new URLSearchParams(window.location.search).get('season'));
+    return Number.isInteger(season) && season >= 0 ? season : 1;
+  });
+  const [selectedEpisode, setSelectedEpisode] = useState(() => {
+    const episode = Number(new URLSearchParams(window.location.search).get('episode'));
+    return Number.isInteger(episode) && episode > 0 ? episode : 1;
+  });
+  const [audioTrack, setAudioTrack] = useState<'Original' | 'Dub'>(() =>
+    new URLSearchParams(window.location.search).get('audio') === 'dub' ? 'Dub' : 'Original',
+  );
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -392,19 +398,31 @@ function TitlePage() {
   const validId = Number.isInteger(id) && id > 0;
   const detailsQuery = useGetTitleDetails(mediaType, id, { query: { enabled: validId, queryKey: getGetTitleDetailsQueryKey(mediaType, id) } });
   const title = detailsQuery.data;
+  const isAnime = mediaType === 'tv' && Boolean(title?.genres.some(genre => genre.id === 16));
+  const animeMalIdQuery = useGetAnimeMalId('tv', id, { query: { enabled: validId && isAnime, queryKey: getGetAnimeMalIdQueryKey('tv', id) } });
+  const audio = audioTrack === 'Dub' ? 'dub' : 'sub';
+  const vidlyUrl = title
+    ? mediaType === 'movie'
+      ? `https://vidly.pro/movie/${title.id}`
+      : isAnime
+        ? animeMalIdQuery.data?.malId
+          ? `https://vidly.pro/anime/mal/${animeMalIdQuery.data.malId}/${selectedEpisode}/${audio}`
+          : null
+        : `https://vidly.pro/tv/${title.id}/${seasonNumber}/${selectedEpisode}`
+    : null;
+  const playerLoading = detailsQuery.isLoading || (isAnime && animeMalIdQuery.isLoading);
   const firstSeason = title?.seasons?.find(season => season.seasonNumber > 0)?.seasonNumber || 1;
   const selectedSeason = title?.seasons?.some(season => season.seasonNumber === seasonNumber) ? seasonNumber : firstSeason;
   const seasonQuery = useGetSeasonDetails('tv', id, selectedSeason, { query: { enabled: mediaType === 'tv' && validId, queryKey: getGetSeasonDetailsQueryKey('tv', id, selectedSeason) } });
   const providerQuery = useGetTitleProviders(mediaType, id, { query: { enabled: validId, queryKey: getGetTitleProvidersQueryKey(mediaType, id) } });
   const recommendations = useGetTitleRecommendations(mediaType, id, { query: { enabled: validId, queryKey: getGetTitleRecommendationsQueryKey(mediaType, id) } });
   const { favorites, toggleFavorite, addHistory } = useLocalData();
-  const trailerStarted = trailerStartedForId === id;
   useEffect(() => {
     if (!title) return;
     addHistory({ id: title.id, mediaType: title.mediaType, title: title.title, overview: title.overview, posterPath: title.posterPath, backdropPath: title.backdropPath, voteAverage: title.voteAverage, releaseDate: title.releaseDate, genreIds: title.genres.map(g => g.id), originalLanguage: '' });
   }, [title?.id]);
   if (!validId) return <div className="page-wrap"><EmptyState title="Title unavailable" copy="This title link is not valid." /></div>;
-  if (detailsQuery.isLoading) return <div className="title-page title-loading"><div className="title-trailer-skeleton" /><div className="poster-skeleton" /></div>;
+  if (detailsQuery.isLoading) return <div className="title-page title-loading"><div className="title-player-skeleton" /><div className="poster-skeleton" /></div>;
   if (detailsQuery.isError || !title) return <div className="page-wrap"><QueryError retry={() => detailsQuery.refetch()} /></div>;
   const titleItem: CatalogMediaItem = { id: title.id, mediaType: title.mediaType, title: title.title, overview: title.overview, posterPath: title.posterPath, backdropPath: title.backdropPath, voteAverage: title.voteAverage, releaseDate: title.releaseDate, genreIds: title.genres.map(g => g.id), originalLanguage: '' };
   const favorite = favorites.some(item => item.id === title.id);
@@ -417,7 +435,6 @@ function TitlePage() {
       else await navigator.clipboard.writeText(url);
     } catch { /* Share sheet dismissed. */ }
   };
-  const openPlayer = () => setLocation(`/player/${mediaType}/${id}/${selectedSeason}/${selectedEpisode}`);
   const selectedSeasonSummary = title.seasons.find(season => season.seasonNumber === selectedSeason);
   const seasonEpisodeCount = seasonQuery.data
     ? Math.max(
@@ -427,15 +444,15 @@ function TitlePage() {
     )
     : selectedSeasonSummary?.episodeCount || 0;
   return <div className="title-page title-detail-page">
-    <section className="title-trailer">
-      {title.trailerKey && trailerStarted
-        ? <div className="trailer-embed-wrap"><iframe src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(title.trailerKey)}?autoplay=1&rel=0`} title={title.trailerName || `${title.title} official trailer`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen {...test('iframe-title-official-trailer')} /><a className="trailer-region-link" href={`https://www.youtube.com/watch?v=${encodeURIComponent(title.trailerKey)}`} target="_blank" rel="noreferrer" {...test('link-open-official-trailer')}>If unavailable in your region, open the official trailer on YouTube <ChevronRight size={13} /></a></div>
-        : <div className="trailer-preview" style={{ backgroundImage: title.backdropPath || title.posterPath ? `linear-gradient(0deg,rgba(0,0,0,.72),rgba(0,0,0,.2)),url(${posterUrl(title.backdropPath || title.posterPath, BACKDROP)})` : undefined }}>
-          {title.trailerKey ? <><button className="trailer-play-action" onClick={() => setTrailerStartedForId(id)} {...test('button-play-trailer')}><Play size={19} fill="currentColor" /><span>Play official trailer</span></button><span className="trailer-region-hint">If playback is unavailable in your region, open the official trailer on YouTube below.</span><a href={`https://www.youtube.com/watch?v=${encodeURIComponent(title.trailerKey)}`} target="_blank" rel="noreferrer" className="trailer-direct-link" {...test('link-open-official-trailer')}>Open on YouTube <ChevronRight size={13} /></a></> : <div className="trailer-preview-unavailable"><span className="eyebrow">OFFICIAL TRAILER</span><strong>No trailer available</strong><small>TMDb provides metadata and official trailer references, not full episode streams.</small></div>}
-        </div>}
+    <section className="title-inline-player" aria-label="Video player">
+      {playerLoading
+        ? <div className="title-player-state" role="status" {...test('status-inline-player')}><span className="eyebrow">LOADING PLAYER</span><small>{isAnime ? 'Finding the Anime stream…' : 'Loading the selected title…'}</small></div>
+        : vidlyUrl
+          ? <iframe key={vidlyUrl} src={vidlyUrl} title={`Vidly player for ${title.title}`} allow="autoplay; encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen {...test('iframe-inline-vidly-player')} />
+          : <div className="title-player-state" role="status" {...test('status-inline-player')}><span className="eyebrow">PLAYER UNAVAILABLE</span><strong>{isAnime ? 'Anime player unavailable' : 'Player unavailable'}</strong><small>{isAnime ? 'A MyAnimeList ID could not be confirmed for this title.' : 'The player could not be loaded for this title.'}</small></div>}
     </section>
     <div className="title-detail-body">
-      <div className="title-intro-label"><span>{title.mediaType === 'tv' ? 'TV SERIES' : 'MOVIE'}</span><button onClick={openPlayer} {...test('button-open-player')}><Play size={14} /> {title.trailerKey ? 'Trailer' : 'Player details'}</button></div>
+      <div className="title-intro-label"><span>{title.mediaType === 'tv' ? 'TV SERIES' : 'MOVIE'}</span></div>
       <h1 className="title-detail-name" {...test('text-title-name')}>{title.title}{title.mediaType === 'tv' && <span> - Season {selectedSeason}</span>}</h1>
       <p className="title-detail-meta" {...test('text-title-metadata')}>{yearOf(title.releaseDate)} <i /> {title.id} <i /> {title.genres.map(genre => genre.name).join('/') || 'Series'}</p>
       <div className="title-quick-actions">
@@ -445,7 +462,7 @@ function TitlePage() {
       </div>
       {feedbackOpen && <form className="title-feedback" onSubmit={e => { e.preventDefault(); if (feedback.trim()) { setFeedbackSent(true); setFeedback(''); } }}><textarea value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Tell us what you think…" aria-label="Title feedback" {...test('input-title-feedback')} /><button type="submit" className="button-secondary" {...test('button-submit-title-feedback')}>{feedbackSent ? 'Sent' : 'Send feedback'}</button></form>}
       <div className="audio-track-row"><span>Language</span><div className="track-switch">{(['Original', 'Dub'] as const).map(track => <button key={track} className={audioTrack === track ? 'selected' : ''} onClick={() => setAudioTrack(track)} {...test(`button-audio-${track.toLowerCase()}`)}>{track}</button>)}</div></div>
-      {audioTrack === 'Dub' && <p className="audio-note">Audio tracks are not supplied by TMDb; this setting is a preference only.</p>}
+      {audioTrack === 'Dub' && <p className="audio-note">Dub playback depends on the selected title and the streams available from the player.</p>}
       {mediaType === 'tv' && <section className="episode-picker">
         <div className="episode-picker-head"><label className="season-picker"><select value={selectedSeason} onChange={e => { setSeasonNumber(Number(e.target.value)); setSelectedEpisode(1); }} aria-label="Select season" {...test('select-season')}>{(title.seasons || []).filter(season => season.seasonNumber >= 0).map(season => <option key={season.id} value={season.seasonNumber}>{season.seasonNumber === 0 ? 'Specials' : `Season ${season.seasonNumber}`}</option>)}</select><ChevronDown size={14} /></label>
           {seasonEpisodeCount > 0 && <span className="update-count">Update to {seasonEpisodeCount} <ChevronRight size={14} /></span>}</div>
@@ -467,15 +484,22 @@ function PlayerPage() {
   const id = Number(params.id);
   const seasonNumber = Number(params.season);
   const episodeNumber = Number(params.episode);
-  const details = useGetTitleDetails(mediaType, id, { query: { queryKey: getGetTitleDetailsQueryKey(mediaType, id) } });
-  const episodeQuery = useGetSeasonDetails('tv', id, seasonNumber, { query: { enabled: mediaType === 'tv', queryKey: getGetSeasonDetailsQueryKey('tv', id, seasonNumber) } });
-  const title = details.data;
-  const episode = episodeQuery.data?.episodes?.find(ep => ep.episodeNumber === episodeNumber);
-  const trailerKey = title?.trailerKey;
-  return <div className="player-page"><div className="player-top"><Link href={title ? `/title/${mediaType}/${id}` : '/'} className="player-back" {...test('link-player-back')}><ArrowLeft size={18} /> Back to title</Link><span>REBELSTREAM / PLAYER</span></div>
-    <div className="player-frame">{details.isLoading ? <div className="player-loading"><div /><span>Loading title information</span></div> : trailerKey ? <iframe src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=0&rel=0`} title={title?.trailerName || `${title?.title} official trailer`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen {...test('iframe-official-trailer')} /> : <div className="player-empty"><span className="player-play"><Play size={26} fill="currentColor" /></span><span className="eyebrow">TRAILER NOT AVAILABLE</span><h2>No official trailer found</h2><p>TMDb provides metadata and official trailer references, not full episode streams.</p></div>}</div>
-     <div className="player-caption"><div><span className="eyebrow">{mediaType === 'tv' ? `SEASON ${seasonNumber} · EPISODE ${episodeNumber}` : 'OFFICIAL TRAILER'}</span><h1>{episode?.name || title?.title || 'Loading…'}</h1><p>{title?.title}{title?.trailerName && ` · ${title.trailerName}`}</p></div><div className="player-notice"><Video size={16} /><span>Full episode playback is not supplied by TMDb. This player shows an official trailer when one is available.{trailerKey && <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(trailerKey)}`} target="_blank" rel="noreferrer" {...test('link-player-official-trailer')}>If unavailable in your region, watch on YouTube <ChevronRight size={12} /></a>}</span></div></div>
-  </div>;
+  const audio = new URLSearchParams(window.location.search).get('audio') === 'dub' ? 'dub' : 'sub';
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!Number.isInteger(id) || id <= 0) {
+      setLocation('/');
+      return;
+    }
+    const season = Number.isInteger(seasonNumber) && seasonNumber >= 0 ? seasonNumber : 1;
+    const episode = Number.isInteger(episodeNumber) && episodeNumber > 0 ? episodeNumber : 1;
+    const query = new URLSearchParams({ season: String(season), episode: String(episode) });
+    if (mediaType === 'tv') query.set('audio', audio);
+    setLocation(`/title/${mediaType}/${id}?${query.toString()}`);
+  }, [audio, episodeNumber, id, mediaType, seasonNumber, setLocation]);
+
+  return <div className="page-wrap player-redirect" role="status">Opening the title player…</div>;
 }
 
 function RouteContent() {
